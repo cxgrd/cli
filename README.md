@@ -26,7 +26,7 @@ Creates `.cg/` directory containing:
 
 **Example:**
 ```bash
-npm run dev -- scan /path/to/myapp
+cxgrd scan /path/to/myapp
 ```
 
 ---
@@ -51,7 +51,7 @@ cxgrd input "description" [--path /project/path]
 
 **Example:**
 ```bash
-npm run dev -- input "rename AuthService to AuthController" --path /myapp
+cxgrd input "rename AuthService to AuthController" --path /myapp
 ```
 
 ---
@@ -78,7 +78,7 @@ cxgrd prompt "description" [--path /project/path]
 
 **Example:**
 ```bash
-npm run dev -- prompt "add OAuth2 authentication" --path /myapp
+cxgrd prompt "add OAuth2 authentication" --path /myapp
 ```
 
 ---
@@ -103,7 +103,7 @@ cxgrd check [projectPath]
 
 **Example:**
 ```bash
-npm run dev -- check /myapp
+cxgrd check /myapp
 ```
 
 ## Output Format
