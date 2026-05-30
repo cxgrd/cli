@@ -7,6 +7,8 @@ import { scanCommand } from './commands/scan';
 import { inputCommand } from './commands/input';
 import { promptCommand } from './commands/prompt';
 import { checkCommand } from './commands/check';
+import { initHooksCommand } from './commands/init-hooks';
+import { watchCommand } from './commands/watch';
 
 async function main() {
   try {
@@ -69,6 +71,70 @@ async function main() {
           }),
         async (argv: any) => {
           await checkCommand(argv.path as string);
+        },
+      )
+      .command(
+        'init-hooks [path]',
+        'Set up pre-commit hooks for architecture checks',
+        (y: any) =>
+          y
+            .positional('path', {
+              describe: 'Project path (default: current directory)',
+              type: 'string',
+            })
+            .option('block-critical', {
+              describe: 'Block commits on critical risk',
+              type: 'boolean',
+              default: true,
+            })
+            .option('block-high', {
+              describe: 'Block commits on high risk',
+              type: 'boolean',
+              default: false,
+            })
+            .option('warn-medium', {
+              describe: 'Warn on medium risk',
+              type: 'boolean',
+              default: true,
+            })
+            .option('threshold', {
+              describe: 'Risk threshold (0-100)',
+              type: 'number',
+              default: 70,
+            })
+            .option('uninstall', {
+              describe: 'Uninstall hooks',
+              type: 'boolean',
+              default: false,
+            }),
+        async (argv: any) => {
+          await initHooksCommand(argv.path as string, {
+            blockCritical: argv.blockCritical,
+            blockHigh: argv.blockHigh,
+            warnMedium: argv.warnMedium,
+            threshold: argv.threshold,
+            uninstall: argv.uninstall,
+          });
+        },
+      )
+      .command(
+        'watch [path]',
+        'Monitor project for real-time architecture analysis',
+        (y: any) =>
+          y
+            .positional('path', {
+              describe: 'Project path (default: current directory)',
+              type: 'string',
+            })
+            .option('debounce', {
+              describe: 'Debounce time in ms',
+              type: 'number',
+              default: 500,
+            }),
+        async (argv: any) => {
+          await watchCommand(argv.path as string, {
+            debounce: argv.debounce,
+          });
         },
       )
       .version('0.1.0')

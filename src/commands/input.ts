@@ -1,112 +1,120 @@
 import { resolve } from 'path';
 import { CgDirectory } from '../cg-directory';
-import chalk from 'chalk';
-
-interface AffectedFile {
-  path: string;
-  reason: string;
-  severity: 'high' | 'medium' | 'low';
-}
+import { BlastRadiusAnalyzer } from '../utils/blast-radius-analyzer';
+import { ChangeDetector } from '../utils/change-detector';
+import { RichOutput, CLIFormatter } from '../utils/cli-formatter';
 
 export async function inputCommand(description: string, projectPath?: string): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
 
-  console.log(chalk.blue('📋 Analyzing blast radius...'));
-  console.log(chalk.gray(`   Change: ${description}`));
+  RichOutput.header('Blast Radius Analysis');
+  RichOutput.info(`Analyzing change: "${description}"`);
 
   try {
     const cgDir = new CgDirectory(rootPath);
     const graph = await cgDir.readGraph();
 
     if (!graph) {
-      console.error(chalk.red('✗ No dependency graph found. Run "cxgrd scan" first.'));
+      RichOutput.error('No dependency graph found. Run "cxgrd scan" first.');
       process.exit(1);
     }
 
-    // Parse the change description to identify affected files
-    const affectedFiles = parseChangeDescription(description, graph);
+    // Detect changed files from description and git
+    const changeDetector = new ChangeDetector(rootPath);
+    const gitChanges = changeDetector.getChangedFiles();
+    const descriptionMatch = changeDetector.parseDescription(description, Object.keys(graph.files || {}));
 
-    // Find all downstream dependencies
-    const allAffected = findDownstreamDependencies(affectedFiles, graph);
+    // Combine both sources of information
+    const changedFiles = [
+      ...gitChanges.files,
+      ...descriptionMatch.files,
+    ];
+    const uniqueFiles = [...new Set(changedFiles)];
 
-    // Log results
-    console.log(chalk.yellow(`\n⚠️  Blast Radius Analysis`));
-    console.log(chalk.gray(`   Direct changes: ${affectedFiles.length}`));
-    console.log(chalk.gray(`   Downstream impact: ${allAffected.length}`));
-
-    if (allAffected.length > 0) {
-      console.log(chalk.yellow('\n📍 Affected files:'));
-      for (const file of allAffected.slice(0, 20)) {
-        const severityColor = file.severity === 'high' ? chalk.red : file.severity === 'medium' ? chalk.yellow : chalk.blue;
-        console.log(`   ${severityColor(`[${file.severity}]`)} ${file.path}`);
-        console.log(`      → ${file.reason}`);
-      }
-
-      if (allAffected.length > 20) {
-        console.log(chalk.gray(`   ... and ${allAffected.length - 20} more files`));
-      }
+    if (uniqueFiles.length === 0) {
+      RichOutput.warning('Could not identify changed files. Using heuristics based on description.');
+    } else {
+      RichOutput.info(`Detected ${uniqueFiles.length} changed file(s)`);
     }
+
+    // Run enhanced blast radius analysis
+    const analyzer = new BlastRadiusAnalyzer(graph);
+    const result = analyzer.analyze(uniqueFiles.length > 0 ? uniqueFiles : []);
+
+    // Display results
+    displayBlastRadiusResults(result);
 
     // Save to history
     const history = await cgDir.readHistory();
     history.push({
       timestamp: Date.now(),
       description,
-      affectedCount: allAffected.length,
+      affectedCount: result.directlyAffected + result.transitivelyAffected,
       status: 'pending',
+      riskLevel: result.riskLevel,
+      confidence: descriptionMatch.confidence,
     });
     await cgDir.writeHistory(history);
 
-    console.log(chalk.green('\n✓ Blast radius saved to history'));
+    RichOutput.success('Blast radius analysis saved to history');
   } catch (err: any) {
-    console.error(chalk.red(`✗ Error: ${err.message}`));
+    RichOutput.error(err.message);
     process.exit(1);
   }
 }
 
-function parseChangeDescription(description: string, graph: any): string[] {
-  // Try to identify files mentioned in the description
-  const mentioned: string[] = [];
-  const files = Object.keys(graph.files || {});
+function displayBlastRadiusResults(result: any): void {
+  RichOutput.blank();
+  RichOutput.section('Impact Summary');
 
-  for (const file of files) {
-    if (description.toLowerCase().includes(file.toLowerCase())) {
-      mentioned.push(file);
+  // Overall risk display
+  const riskBadge = CLIFormatter.severity(result.riskLevel);
+  console.log(`   Overall Risk: ${riskBadge}`);
+  console.log(`   Risk Score: ${result.totalRisk}/100`);
+  console.log(`   ${CLIFormatter.progressBar(result.totalRisk, 100)}`);
+
+  RichOutput.blank();
+  RichOutput.section('Affected Files');
+  console.log(`   Direct impact: ${result.directlyAffected} file(s)`);
+  console.log(`   Transitive impact: ${result.transitivelyAffected} file(s)`);
+  console.log(`   Total affected: ${result.affectedFiles.length} file(s)`);
+
+  if (result.affectedFiles.length > 0) {
+    RichOutput.blank();
+    console.log('   Top affected files:\n');
+
+    const displayFiles = result.affectedFiles.slice(0, 15);
+    for (const file of displayFiles) {
+      const severity = CLIFormatter.severity(file.severity);
+      const distanceLabel = file.distance === 1 ? '(direct)' : `(transitive, depth: ${file.distance})`;
+      console.log(`   ${severity} ${file.path}`);
+      console.log(`      └─ ${file.reason} ${distanceLabel}`);
+    }
+
+    if (result.affectedFiles.length > 15) {
+      RichOutput.blank();
+      console.log(`   ... and ${result.affectedFiles.length - 15} more files`);
     }
   }
 
-  return mentioned;
-}
-
-function findDownstreamDependencies(startFiles: string[], graph: any): AffectedFile[] {
-  const affected = new Set<AffectedFile>();
-  const visited = new Set<string>();
-  const queue = [...startFiles];
-
-  while (queue.length > 0) {
-    const currentFile = queue.shift()!;
-
-    if (visited.has(currentFile)) continue;
-    visited.add(currentFile);
-
-    // Find all files that import/depend on current file
-    for (const [filePath, node] of Object.entries(graph.files || {})) {
-      const fileNode = node as any;
-      for (const dep of fileNode.dependencies || []) {
-        if (dep.to === currentFile || dep.to.includes(currentFile)) {
-          affected.add({
-            path: filePath,
-            reason: `Imports from ${currentFile}`,
-            severity: 'high',
-          });
-
-          if (!visited.has(filePath)) {
-            queue.push(filePath);
-          }
-        }
-      }
+  // Change types
+  if (result.changeTypes.length > 0) {
+    RichOutput.blank();
+    RichOutput.section('Change Classification');
+    for (const change of result.changeTypes) {
+      const confidence = Math.round(change.confidence * 100);
+      console.log(`   • ${change.type}: ${change.description} (${confidence}% confident)`);
     }
   }
 
-  return Array.from(affected);
+  // Recommendations
+  if (result.recommendations.length > 0) {
+    RichOutput.blank();
+    RichOutput.section('Recommendations');
+    for (const rec of result.recommendations) {
+      console.log(`   ${rec}`);
+    }
+  }
+
+  RichOutput.blank();
 }
