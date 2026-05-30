@@ -84,27 +84,50 @@ cxgrd prompt "add OAuth2 authentication" --path /myapp
 ---
 
 ### cxgrd check [path]
-**Purpose:** Validate codebase for issues
+**Purpose:** Structural graph validation + compiler-backed semantic checks
 
 **Syntax:**
 ```bash
-cxgrd check [projectPath]
+cxgrd check [projectPath] [--staged] [--changed] [--skip-compiler] [--skip-structural]
 ```
 
 **Options:**
 - `projectPath` (optional): Path to analyze
+- `--staged`: Only report issues in git staged files (used by pre-commit hooks)
+- `--changed`: Staged + unstaged changed files
+- `--skip-compiler`: Structural checks only
+- `--skip-structural`: Compiler checks only
+- `--strict`: Fail if a detected language's compiler was skipped (recommended for CI)
+
+**Compiler tools (auto-detected per project):**
+- TypeScript — programmatic `typescript` API per `tsconfig.json`
+- Python — `pyright --outputjson` (skipped if pyright not on PATH)
+- Rust — `cargo check --message-format=json`
 
 **Output:**
-- Circular dependency chains
-- Orphaned files
-- Architecture layer violations
-- Potentially unused imports
-- Overall status (passed/failed)
+- Structural: circular deps, orphans, layer violations
+- Compiler: type/syntax errors with file, line, and diagnostic code
+- `.cg/check-latest.json` with full result payload
 
-**Example:**
+**Examples:**
 ```bash
 cxgrd check /myapp
+cxgrd check . --staged
+cxgrd check . --skip-structural
+cxgrd check . --strict          # CI: fail if Pyright/cargo missing on detected projects
+cxgrd doctor .                  # verify toolchain before enabling --strict
 ```
+
+### cxgrd doctor [path]
+**Purpose:** Verify Node/runtime tools and (optionally) project readiness for strict checks
+
+**Syntax:**
+```bash
+cxgrd doctor          # global toolchain only
+cxgrd doctor [path]   # + project language detection and .cg status
+```
+
+Exits with code 1 when the project cannot run `cxgrd check --strict` (missing Pyright on a Python repo, no scan, etc.).
 
 ## Output Format
 

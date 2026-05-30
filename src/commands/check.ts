@@ -1,24 +1,31 @@
 import { resolve } from 'path';
 import { CgDirectory } from '../cg-directory';
 import chalk from 'chalk';
+import { runCheck } from '../check/check-runner';
+import { resolveScopeFiles } from '../check/scope';
+import type { CheckScope } from '../check/types';
 
-export interface CheckResult {
-  passed: boolean;
-  issues: CheckIssue[];
-  summary: string;
+export interface CheckCommandOptions {
+  scope?: CheckScope;
+  skipStructural?: boolean;
+  skipCompiler?: boolean;
+  strict?: boolean;
 }
 
-interface CheckIssue {
-  severity: 'error' | 'warning' | 'info';
-  message: string;
-  file?: string;
-  line?: number;
-}
-
-export async function checkCommand(projectPath?: string): Promise<void> {
+export async function checkCommand(
+  projectPath?: string,
+  options: CheckCommandOptions = {},
+): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
+  const scope = options.scope ?? 'all';
 
-  console.log(chalk.blue('✓ Running architectural checks...'));
+  console.log(chalk.blue('✓ Running cxgrd check...'));
+  if (scope !== 'all') {
+    console.log(chalk.gray(`   Scope: ${scope} files only`));
+  }
+  if (options.strict) {
+    console.log(chalk.gray('   Mode: strict (skipped compilers fail the check)'));
+  }
 
   try {
     const cgDir = new CgDirectory(rootPath);
@@ -31,180 +38,125 @@ export async function checkCommand(projectPath?: string): Promise<void> {
       process.exit(1);
     }
 
-    const result = performChecks(graph, arch, history);
+    const scopeFiles = scope === 'all' ? null : resolveScopeFiles(rootPath, scope);
+
+    if (scopeFiles && scopeFiles.size === 0) {
+      console.log(chalk.yellow('   No files in scope — skipping checks.'));
+      return;
+    }
+
+    console.log(chalk.gray('   Structural analysis...'));
+    if (!options.skipCompiler) {
+      console.log(chalk.gray('   Compiler verification (TypeScript, Python, Rust)...'));
+    }
+
+    const result = await runCheck(graph, arch, {
+      projectPath: rootPath,
+      scope,
+      skipStructural: options.skipStructural ?? false,
+      skipCompiler: options.skipCompiler ?? false,
+      strict: options.strict ?? false,
+    });
+
+    printCompilerSummary(result.compilerSummary);
+
+    if (!options.strict && result.skippedLanguages.length > 0) {
+      console.log(
+        chalk.yellow(
+          `   ⚠ Skipped compiler(s) for: ${result.skippedLanguages.join(', ')} — not counted as failures.`,
+        ),
+      );
+      console.log(
+        chalk.yellow('     Use --strict or run `cxgrd doctor` to fix your toolchain.'),
+      );
+    }
 
     if (result.passed) {
       console.log(chalk.green('✓ All checks passed!'));
       console.log(chalk.gray(`   ${result.summary}`));
     } else {
-      console.log(chalk.red('✗ Some issues found:'));
+      console.log(chalk.red('✗ Issues found:'));
       for (const issue of result.issues) {
-        const color = issue.severity === 'error' ? chalk.red : issue.severity === 'warning' ? chalk.yellow : chalk.blue;
-        console.log(color(`   [${issue.severity.toUpperCase()}] ${issue.message}`));
+        const color =
+          issue.severity === 'error'
+            ? chalk.red
+            : issue.severity === 'warning'
+              ? chalk.yellow
+              : chalk.blue;
+        const tag = issue.source === 'compiler' ? 'compiler' : 'structural';
+        console.log(
+          color(`   [${issue.severity.toUpperCase()}][${tag}] ${issue.message}`),
+        );
         if (issue.file) {
-          console.log(chalk.gray(`          at ${issue.file}${issue.line ? `:${issue.line}` : ''}`));
+          const loc = issue.line ? `:${issue.line}` : '';
+          const code = issue.code ? ` (${issue.code})` : '';
+          console.log(chalk.gray(`          at ${issue.file}${loc}${code}`));
         }
       }
+      console.log(chalk.gray(`   ${result.summary}`));
     }
 
-    // Save check result to history
     const historyEntry = {
       timestamp: Date.now(),
       type: 'check',
+      scope,
+      strict: options.strict ?? false,
       passed: result.passed,
       issueCount: result.issues.length,
+      errorCount: result.issues.filter((i) => i.severity === 'error').length,
+      compiler: result.compilerSummary,
     };
 
     history.push(historyEntry);
     await cgDir.writeHistory(history);
+    await cgDir.writeCheckResult({
+      timestamp: historyEntry.timestamp,
+      passed: result.passed,
+      scope,
+      issues: result.issues,
+      compiler: result.compilerSummary,
+      summary: result.summary,
+    });
 
     if (!result.passed) {
       process.exit(1);
     }
-  } catch (err: any) {
-    console.error(chalk.red(`✗ Error: ${err.message}`));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(chalk.red(`✗ Error: ${message}`));
     process.exit(1);
   }
 }
 
-function performChecks(graph: any, arch: any, history: any[]): CheckResult {
-  const issues: CheckIssue[] = [];
+function printCompilerSummary(
+  summaries: Array<{
+    language: string;
+    tool: string;
+    projectRoot: string;
+    passed: boolean;
+    errorCount: number;
+    warningCount: number;
+    skipped: boolean;
+    skipReason?: string;
+  }>,
+): void {
+  if (summaries.length === 0) return;
 
-  // Check 1: Circular dependencies
-  const circularDeps = findCircularDependencies(graph);
-  for (const cycle of circularDeps) {
-    issues.push({
-      severity: 'error',
-      message: `Circular dependency detected: ${cycle.join(' → ')}`,
-    });
-  }
-
-  // Check 2: Orphaned files
-  const orphanedFiles = findOrphanedFiles(graph);
-  for (const file of orphanedFiles.slice(0, 5)) {
-    issues.push({
-      severity: 'warning',
-      message: `Orphaned file: ${file}`,
-      file,
-    });
-  }
-
-  // Check 3: Architecture violations
-  const violations = findArchitectureViolations(graph, arch);
-  for (const violation of violations.slice(0, 5)) {
-    issues.push({
-      severity: 'warning',
-      message: violation.message,
-      file: violation.file,
-    });
-  }
-
-  // Check 4: Unused imports
-  const unusedImports = findUnusedImports(graph);
-  for (const unused of unusedImports.slice(0, 3)) {
-    issues.push({
-      severity: 'info',
-      message: `Potentially unused import: ${unused}`,
-    });
-  }
-
-  return {
-    passed: issues.filter(i => i.severity === 'error').length === 0,
-    issues,
-    summary: `Found ${issues.filter(i => i.severity === 'error').length} errors, ${issues.filter(i => i.severity === 'warning').length} warnings`,
-  };
-}
-
-function findCircularDependencies(graph: any): string[][] {
-  const cycles: string[][] = [];
-  const visited = new Set<string>();
-  const recursionStack = new Set<string>();
-
-  function dfs(node: string, path: string[]): boolean {
-    visited.add(node);
-    recursionStack.add(node);
-    path.push(node);
-
-    const fileNode = graph.files?.[node];
-    if (fileNode?.dependencies) {
-      for (const dep of fileNode.dependencies) {
-        if (recursionStack.has(dep.to)) {
-          const cycleStart = path.indexOf(dep.to);
-          cycles.push(path.slice(cycleStart).concat([dep.to]));
-        } else if (!visited.has(dep.to)) {
-          dfs(dep.to, path);
-        }
-      }
+  console.log(chalk.gray('   Compiler runs:'));
+  for (const s of summaries) {
+    if (s.skipped) {
+      console.log(
+        chalk.gray(`     · ${s.language} (${s.tool} @ ${s.projectRoot}): skipped — ${s.skipReason}`),
+      );
+      continue;
     }
-
-    path.pop();
-    recursionStack.delete(node);
-    return false;
+    const status = s.passed ? chalk.green('ok') : chalk.red('failed');
+    console.log(
+      chalk.gray(
+        `     · ${s.language} (${s.tool} @ ${s.projectRoot}): `,
+      ) +
+        status +
+        chalk.gray(` — ${s.errorCount} errors, ${s.warningCount} warnings`),
+    );
   }
-
-  for (const file of Object.keys(graph.files || {})) {
-    if (!visited.has(file)) {
-      dfs(file, []);
-    }
-  }
-
-  return cycles;
-}
-
-function findOrphanedFiles(graph: any): string[] {
-  const allFiles = Object.keys(graph.files || {});
-  const referenced = new Set<string>();
-  const referencers = new Set<string>();
-
-  for (const [filePath, node] of Object.entries(graph.files || {})) {
-    const fileNode = node as any;
-    referencers.add(filePath);
-
-    for (const dep of fileNode.dependencies || []) {
-      referenced.add(dep.to);
-    }
-  }
-
-  return allFiles.filter(f => !referenced.has(f) && !referencers.has(f));
-}
-
-function findArchitectureViolations(graph: any, arch: any): Array<{ message: string; file: string }> {
-  const violations: Array<{ message: string; file: string }> = [];
-
-  // Simple heuristic: util files shouldn't import from service files
-  const utilFiles = arch?.layers?.util || [];
-  const serviceFiles = arch?.layers?.service || [];
-
-  for (const utilFile of utilFiles) {
-    const node = graph.files?.[utilFile];
-    if (node?.dependencies) {
-      for (const dep of node.dependencies) {
-        if (serviceFiles.some((sf: string) => dep.to.includes(sf))) {
-          violations.push({
-            message: `Util layer file imports from service layer`,
-            file: utilFile,
-          });
-        }
-      }
-    }
-  }
-
-  return violations;
-}
-
-function findUnusedImports(graph: any): string[] {
-  // This is a simplified check - in reality you'd need AST analysis
-  const unused: string[] = [];
-
-  for (const [filePath, node] of Object.entries(graph.files || {})) {
-    const fileNode = node as any;
-    const content = graph.files?.[filePath]?.content;
-
-    // This is a placeholder - real implementation would need proper analysis
-    if (fileNode.dependencies?.length > 20) {
-      unused.push(`${filePath} (many imports: ${fileNode.dependencies.length})`);
-    }
-  }
-
-  return unused;
 }

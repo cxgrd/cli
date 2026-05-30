@@ -108,6 +108,12 @@ export class CgDirectory {
     }
   }
 
+  async writeCheckResult(result: unknown): Promise<void> {
+    await this.initialize();
+    const checkPath = join(this.cgPath, 'check-latest.json');
+    await writeFile(checkPath, JSON.stringify(result, null, 2));
+  }
+
   async readMeta(): Promise<CgMeta | null> {
     try {
       const metaPath = join(this.cgPath, 'meta.json');

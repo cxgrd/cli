@@ -9,6 +9,7 @@ import { promptCommand } from './commands/prompt';
 import { checkCommand } from './commands/check';
 import { initHooksCommand } from './commands/init-hooks';
 import { watchCommand } from './commands/watch';
+import { doctorCommand } from './commands/doctor';
 
 async function main() {
   try {
@@ -63,14 +64,59 @@ async function main() {
       )
       .command(
         'check [path]',
-        'Check implementation for architecture violations',
+        'Validate architecture and run compiler-backed verification',
+        (y: any) =>
+          y
+            .positional('path', {
+              describe: 'Project path (default: current directory)',
+              type: 'string',
+            })
+            .option('staged', {
+              describe: 'Only check git staged files (for pre-commit hooks)',
+              type: 'boolean',
+              default: false,
+            })
+            .option('changed', {
+              describe: 'Only check staged and unstaged changed files',
+              type: 'boolean',
+              default: false,
+            })
+            .option('skip-compiler', {
+              describe: 'Skip compiler-backed verification (structural only)',
+              type: 'boolean',
+              default: false,
+            })
+            .option('skip-structural', {
+              describe: 'Skip structural graph checks (compiler only)',
+              type: 'boolean',
+              default: false,
+            })
+            .option('strict', {
+              describe:
+                'Fail if a detected language compiler was skipped (e.g. Pyright missing on a Python project)',
+              type: 'boolean',
+              default: false,
+            }),
+        async (argv: any) => {
+          const scope = argv.staged ? 'staged' : argv.changed ? 'changed' : 'all';
+          await checkCommand(argv.path as string, {
+            scope,
+            skipCompiler: argv.skipCompiler,
+            skipStructural: argv.skipStructural,
+            strict: argv.strict,
+          });
+        },
+      )
+      .command(
+        'doctor [path]',
+        'Check runtime, compiler tools, and project readiness for cxgrd check --strict',
         (y: any) =>
           y.positional('path', {
-            describe: 'Project path (default: current directory)',
+            describe: 'Project path (optional; omit for global toolchain only)',
             type: 'string',
           }),
         async (argv: any) => {
-          await checkCommand(argv.path as string);
+          await doctorCommand(argv.path as string);
         },
       )
       .command(
