@@ -1,4 +1,4 @@
-# CXGRD CLI - Phase 1 Implementation
+# CXGRD CLI 
 
 The TypeScript CLI provides user-friendly commands for dependency analysis and AI-safe code changes.
 
@@ -160,31 +160,6 @@ Exits with code 1 when the project cannot run `cxgrd check --strict` (missing Py
 }
 ```
 
-## Supported Languages
-
-**Phase 1:**
-- TypeScript (.ts, .tsx)
-- JavaScript (.js, .jsx)
-- Python (.py)
-- C++ (.cpp, .h, .hpp)
-- Java (.java)
-- SQL, YAML, JSON (basic support)
-
-## Project Files
-
-```
-src/
-├── index.ts              - Main CLI entry point (yargs)
-├── scanner.ts            - File system scanning
-├── graph.ts              - Dependency extraction
-├── cg-directory.ts       - .cg/ management
-└── commands/
-    ├── scan.ts           - Build graph
-    ├── input.ts          - Blast radius
-    ├── prompt.ts         - AI prompt generation
-    └── check.ts          - Validation
-```
-
 ## Development
 
 ### Installation
@@ -226,21 +201,3 @@ Checks for circular dependencies, orphaned files, and architecture violations.
 3. **CG Directory** - Manages `.cg/` persistence
 4. **Commands** - User-facing CLI operations
 
-## Phase 1 Scope
-
-✅ File scanning with language detection  
-✅ Regex-based dependency extraction  
-✅ Symbol extraction  
-✅ Architecture inference  
-✅ CLI commands (scan, input, prompt, check)  
-✅ Blast radius analysis  
-✅ AI prompt generation  
-✅ Code validation  
-
-## Phase 2 Roadmap
-
-📋 Watch mode for continuous analysis  
-📋 Pre-commit hooks  
-📋 Tree-sitter integration for accuracy  
-📋 Pattern detection  
-📋 Team features (shared graph server)  
