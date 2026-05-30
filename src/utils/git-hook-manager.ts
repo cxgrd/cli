@@ -5,8 +5,8 @@
  */
 
 import { execSync } from 'child_process';
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
-import { resolve, join } from 'path';
+import { writeFileSync, readFileSync, existsSync, mkdirSync, chmodSync, unlinkSync } from 'fs';
+import { resolve } from 'path';
 
 export interface HookConfig {
   enabled: boolean;
@@ -52,27 +52,32 @@ export class GitHookManager {
       mkdirSync(this.cgDir, { recursive: true });
     }
 
+    // Create hooks directory if needed
+    if (!existsSync(this.hooksDir)) {
+      mkdirSync(this.hooksDir, { recursive: true });
+    }
+
+    if (process.platform === 'win32') {
+      this.createWindowsHook();
+    }
+
     // Save hook configuration
     this.writeHookConfig(fullConfig);
 
     // Create pre-commit hook script
     this.createPreCommitHook();
 
-    // Make hook executable
+    // Make hook executable using Node fs (cross-platform)
     this.makeExecutable(resolve(this.hooksDir, 'pre-commit'));
-
-    return;
   }
 
   /**
    * Create the actual pre-commit hook script
    */
   private createPreCommitHook(): void {
-    const hookScript = `#!/bin/bash
+    const hookScript = `#!/bin/sh
 # cxgrd pre-commit hook
 # Prevents commits that break the architecture
-
-set -e
 
 # Get the project root
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
@@ -80,12 +85,12 @@ CG_DIR="$PROJECT_ROOT/.cg"
 HOOK_CONFIG="$CG_DIR/hooks.json"
 
 # Check if cxgrd is available
-if ! command -v cxgrd &> /dev/null; then
-  echo "⚠️  cxgrd not found in PATH. Skipping architecture check."
+if ! command -v cxgrd > /dev/null 2>&1; then
+  echo "warning: cxgrd not found in PATH. Skipping architecture check."
   exit 0
 fi
 
-# Check if hook is enabled
+# Check if hook config exists
 if [ ! -f "$HOOK_CONFIG" ]; then
   exit 0
 fi
@@ -97,18 +102,33 @@ if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
 
-echo "🔍 Running cxgrd architecture check..."
+echo "Running cxgrd architecture check..."
 
 # Run cxgrd check on staged files
 if ! cxgrd check "$PROJECT_ROOT" --staged; then
-  echo "❌ Architecture check failed. Commit blocked."
+  echo "Architecture check failed. Commit blocked."
   exit 1
 fi
 
 exit 0
 `;
 
-    writeFileSync(resolve(this.hooksDir, 'pre-commit'), hookScript);
+    writeFileSync(resolve(this.hooksDir, 'pre-commit'), hookScript, { encoding: 'utf-8' });
+  }
+
+  private createWindowsHook(): void {
+    const batScript = `@echo off
+    git diff --cached --name-only --diff-filter=ACMRUXB > nul 2>&1
+    if %errorlevel% neq 0 exit /b 0
+    echo Running cxgrd architecture check...
+    cxgrd check --staged
+    if %errorlevel% neq 0 (
+    echo Architecture check failed. Commit blocked.
+    exit /b 1
+    )
+    exit /b 0
+    `;
+    writeFileSync(resolve(this.hooksDir, 'pre-commit.bat'), batScript, { encoding: 'utf-8' });
   }
 
   /**
@@ -125,7 +145,6 @@ exit 0
   readHookConfig(): HookConfig | null {
     const configPath = resolve(this.cgDir, 'hooks.json');
     if (!existsSync(configPath)) return null;
-
     try {
       return JSON.parse(readFileSync(configPath, 'utf-8'));
     } catch {
@@ -134,13 +153,15 @@ exit 0
   }
 
   /**
-   * Make file executable (Unix permissions)
+   * Make file executable — uses Node's chmodSync (cross-platform safe)
+   * On Windows this is a no-op but won't throw
    */
   private makeExecutable(filePath: string): void {
     try {
-      execSync(`chmod +x "${filePath}"`);
+      // 0o755 = rwxr-xr-x — works on macOS/Linux, silently ignored on Windows
+      chmodSync(filePath, 0o755);
     } catch {
-      // May fail on Windows, but that's okay
+      // Silently ignore — Windows doesn't support Unix permissions
     }
   }
 
@@ -150,7 +171,6 @@ exit 0
   isInstalled(): boolean {
     const hookPath = resolve(this.hooksDir, 'pre-commit');
     if (!existsSync(hookPath)) return false;
-
     try {
       const content = readFileSync(hookPath, 'utf-8');
       return content.includes('cxgrd');
@@ -160,27 +180,22 @@ exit 0
   }
 
   /**
-   * Uninstall hooks
+   * Uninstall hooks — uses Node's unlinkSync instead of shell rm
    */
   async uninstallHooks(): Promise<void> {
-    try {
-      const hookPath = resolve(this.hooksDir, 'pre-commit');
-      execSync(`rm "${hookPath}"`);
-    } catch {
-      // Hook might not exist
+    const hookPath = resolve(this.hooksDir, 'pre-commit');
+    if (existsSync(hookPath)) {
+      try { unlinkSync(hookPath); } catch { /* ignore */ }
     }
 
-    // Remove config
-    try {
-      const configPath = resolve(this.cgDir, 'hooks.json');
-      execSync(`rm "${configPath}"`);
-    } catch {
-      // Config might not exist
+    const configPath = resolve(this.cgDir, 'hooks.json');
+    if (existsSync(configPath)) {
+      try { unlinkSync(configPath); } catch { /* ignore */ }
     }
   }
 
   /**
-   * Get information about hooks status
+   * Get hooks status
    */
   getStatus(): {
     installed: boolean;
@@ -220,7 +235,7 @@ exit 0
   }
 
   /**
-   * Get staged files that would trigger analysis
+   * Get staged files
    */
   getStagedFiles(): string[] {
     try {
@@ -239,15 +254,12 @@ exit 0
    */
   isIgnored(filePath: string, patterns: string[]): boolean {
     for (const pattern of patterns) {
-      // Simple glob pattern matching
       const regexPattern = pattern
         .replace(/\./g, '\\.')
-        .replace(/\*/g, '.*')
+        .replace(/\*\*/g, '.*')
+        .replace(/\*/g, '[^/]*')
         .replace(/\?/g, '.');
-
-      if (new RegExp(`^${regexPattern}$`).test(filePath)) {
-        return true;
-      }
+      if (new RegExp(`^${regexPattern}$`).test(filePath)) return true;
     }
     return false;
   }

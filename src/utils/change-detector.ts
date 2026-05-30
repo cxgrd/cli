@@ -5,7 +5,6 @@
  */
 
 import { execSync } from 'child_process';
-import { resolve } from 'path';
 
 export interface ChangedFilesInfo {
   files: string[];
@@ -29,7 +28,7 @@ export class ChangeDetector {
   getChangedFiles(): ChangedFilesInfo {
     try {
       const staged = this.getGitStatus('--cached');
-      const unstaged = this.getGitStatus('--porcelain');
+      const unstaged = this.getGitStatus('');
       const allChanged = [...new Set([...staged, ...unstaged])];
 
       return {
@@ -148,12 +147,13 @@ export class ChangeDetector {
   }
 
   /**
-   * Git status parsing
+   * Git status parsing — uses only --name-only, no --porcelain conflict
    */
   private getGitStatus(flag: string): string[] {
     try {
+      const flagStr = flag ? `${flag} ` : '';
       const output = execSync(
-        `git diff ${flag} --name-only --diff-filter=ACMRUXB`,
+        `git diff ${flagStr}--name-only --diff-filter=ACMRUXB`,
         { cwd: this.projectRoot, encoding: 'utf-8' }
       );
       return output.split('\n').filter(f => f.length > 0);
@@ -176,21 +176,17 @@ export class ChangeDetector {
     for (const file of allFiles) {
       if (changed.has(file)) continue;
 
-      // Score based on similarity
       let score = 0;
 
-      // Same directory?
       const changedDir = changedFiles[0]?.split('/').slice(0, -1).join('/');
       const fileDir = file.split('/').slice(0, -1).join('/');
       if (changedDir && fileDir === changedDir) score += 3;
 
-      // Related by naming
-      for (const changed of changedFiles) {
-        const similarity = this.stringSimilarity(changed, file);
+      for (const c of changedFiles) {
+        const similarity = this.stringSimilarity(c, file);
         score += similarity * 2;
       }
 
-      // Common patterns
       if (file.includes('test') || file.includes('spec')) score += 2;
       if (file.includes('types') || file.includes('interface')) score += 1;
 
@@ -205,33 +201,18 @@ export class ChangeDetector {
       .map(([file]) => file);
   }
 
-  /**
-   * Simple string similarity (Levenshtein-like)
-   */
   private stringSimilarity(a: string, b: string): number {
     const longer = a.length > b.length ? a : b;
     const shorter = a.length > b.length ? b : a;
-
     if (longer.length === 0) return 1;
-
     const editDistance = this.levenshteinDistance(longer, shorter);
     return (longer.length - editDistance) / longer.length;
   }
 
-  /**
-   * Calculate Levenshtein distance
-   */
   private levenshteinDistance(s1: string, s2: string): number {
     const distances: number[][] = [];
-
-    for (let i = 0; i <= s1.length; i++) {
-      distances[i] = [i];
-    }
-
-    for (let j = 0; j <= s2.length; j++) {
-      distances[0][j] = j;
-    }
-
+    for (let i = 0; i <= s1.length; i++) distances[i] = [i];
+    for (let j = 0; j <= s2.length; j++) distances[0][j] = j;
     for (let i = 1; i <= s1.length; i++) {
       for (let j = 1; j <= s2.length; j++) {
         if (s1[i - 1] === s2[j - 1]) {
@@ -245,7 +226,6 @@ export class ChangeDetector {
         }
       }
     }
-
     return distances[s1.length][s2.length];
   }
 }
