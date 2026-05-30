@@ -129,7 +129,7 @@ cxgrd doctor [path]   # + project language detection and .cg status
 
 Exits with code 1 when the project cannot run `cxgrd check --strict` (missing Pyright on a Python repo, no scan, etc.).
 
-## cxgrd init-hooks
+### cxgrd init-hooks
 **Purpose:** Initialize pre-commit hooks to catch errors before commiting to git
 
 **Syntax:**
@@ -139,7 +139,7 @@ cxgrd init-hooks --threshold 80 --block-critical    #initialize hook with thresh
 cxgrd init-hooks --uninstall     # uninstall hook
 ```
 
-## cxgrd watch
+### cxgrd watch
 **Purpose:** Real time monitoring which works in background
 
 **Syntax:**
