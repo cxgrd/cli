@@ -3,6 +3,7 @@ import { CgDirectory } from '../cg-directory';
 import { BlastRadiusAnalyzer } from '../utils/blast-radius-analyzer';
 import { ChangeDetector } from '../utils/change-detector';
 import { RichOutput, CLIFormatter } from '../utils/cli-formatter';
+import { appendMemorySession } from '../memory/repo-memory';
 
 export async function inputCommand(description: string, projectPath?: string): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
@@ -55,6 +56,15 @@ export async function inputCommand(description: string, projectPath?: string): P
       confidence: descriptionMatch.confidence,
     });
     await cgDir.writeHistory(history);
+
+    await appendMemorySession(cgDir, {
+      type: 'input',
+      summary: description.slice(0, 120),
+      metadata: {
+        riskLevel: result.riskLevel,
+        affected: result.affectedFiles.length,
+      },
+    });
 
     RichOutput.success('Blast radius analysis saved to history');
   } catch (err: any) {

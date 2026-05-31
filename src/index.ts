@@ -10,8 +10,12 @@ import { checkCommand } from './commands/check';
 import { initHooksCommand } from './commands/init-hooks';
 import { watchCommand } from './commands/watch';
 import { doctorCommand } from './commands/doctor';
+import { authLoginCommand, authLogoutCommand, authStatusCommand } from './commands/auth';
+import { loadCxgrdEnv } from './config/env';
 
 async function main() {
+  await loadCxgrdEnv();
+
   try {
     await yargs(hideBin(process.argv))
       .command(
@@ -46,7 +50,7 @@ async function main() {
       )
       .command(
         'prompt <description>',
-        'Generate enriched AI prompt with architectural context',
+        'Generate LLM-enriched AI prompt (Pro / Team / Enterprise)',
         (y: any) =>
           y
             .positional('description', {
@@ -106,6 +110,20 @@ async function main() {
             strict: argv.strict,
           });
         },
+      )
+      .command('auth', 'Sign in for Pro features (prompt, repo memory)', (y: any) =>
+        y
+          .command('login', 'Open browser to sign in with GitHub', {}, async () => {
+            await authLoginCommand();
+          })
+          .command('logout', 'Remove stored credentials', {}, async () => {
+            await authLogoutCommand();
+          })
+          .command('status', 'Show current plan and auth state', {}, async () => {
+            await authStatusCommand();
+          })
+          .demandCommand(1, 'Specify auth login, logout, or status')
+          .help(),
       )
       .command(
         'doctor [path]',
@@ -186,7 +204,7 @@ async function main() {
       .version('0.1.0')
       .help()
       .alias('h', 'help')
-      .epilogue(chalk.gray('For more information, visit: https://cxgrd.dev'))
+      .epilogue(chalk.gray('For more information, visit: https://cxgrd.com'))
       .demandCommand(1, chalk.red('You must provide a command'))
       .strict()
       .parseAsync();

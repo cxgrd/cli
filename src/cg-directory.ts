@@ -1,5 +1,6 @@
 import { mkdir, writeFile, readFile } from 'fs/promises';
 import { join } from 'path';
+import type { CgMemoryFile, CgPatternsFile } from './memory/types';
 
 export interface CgMeta {
   lastScan: number;
@@ -98,14 +99,40 @@ export class CgDirectory {
     }
   }
 
-  async readPatterns(): Promise<any> {
+  async readPatterns(): Promise<CgPatternsFile | null> {
     try {
       const patternsPath = join(this.cgPath, 'patterns.json');
       const data = await readFile(patternsPath, 'utf-8');
+      return JSON.parse(data) as CgPatternsFile;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async readSymbols(): Promise<Record<string, string[]>> {
+    try {
+      const symbolsPath = join(this.cgPath, 'symbols.json');
+      const data = await readFile(symbolsPath, 'utf-8');
       return JSON.parse(data);
     } catch (err) {
       return {};
     }
+  }
+
+  async readMemory(): Promise<CgMemoryFile | null> {
+    try {
+      const memoryPath = join(this.cgPath, 'memory.json');
+      const data = await readFile(memoryPath, 'utf-8');
+      return JSON.parse(data) as CgMemoryFile;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async writeMemory(memory: CgMemoryFile): Promise<void> {
+    await this.initialize();
+    const memoryPath = join(this.cgPath, 'memory.json');
+    await writeFile(memoryPath, JSON.stringify(memory, null, 2));
   }
 
   async writeCheckResult(result: unknown): Promise<void> {
