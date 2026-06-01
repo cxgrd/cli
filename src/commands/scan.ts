@@ -6,8 +6,18 @@ import chalk from 'chalk';
 import { diffGraphs, analyzePatterns } from '../memory/pattern-analyzer';
 import type { CgPatternsFile } from '../memory/types';
 import { appendMemorySession } from '../memory/repo-memory';
+import { resolveActiveSession } from '../auth/auth-session';
+import { planIncludesFeature } from '../auth/plans';
+import { syncPush } from '../team/graph-sync';
 
-export async function scanCommand(projectPath?: string): Promise<void> {
+export interface ScanCommandOptions {
+  sync?: boolean;
+}
+
+export async function scanCommand(
+  projectPath?: string,
+  options: ScanCommandOptions = {},
+): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
 
   console.log(chalk.blue('🔍 Scanning project...'));
@@ -88,6 +98,19 @@ export async function scanCommand(projectPath?: string): Promise<void> {
 
     console.log(chalk.green('✓ Scan complete!'));
     console.log(chalk.green('✓ Updated .cg/ (graph, symbols, arch, patterns, memory)'));
+
+    const session = await resolveActiveSession();
+    const shouldSync =
+      options.sync || (session && planIncludesFeature(session.plan, 'team_cloud') && session.orgId);
+    if (shouldSync && session?.orgId) {
+      try {
+        await syncPush(cgDir, rootPath, session);
+        console.log(chalk.green('✓ Synced graph to org cloud'));
+      } catch (syncErr: unknown) {
+        const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+        console.log(chalk.yellow(`   Sync skipped: ${msg}`));
+      }
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(chalk.red(`✗ Error: ${message}`));

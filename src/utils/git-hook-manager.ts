@@ -102,10 +102,10 @@ if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
 
-echo "Running cxgrd architecture check..."
+echo "Running cxgrd team pre-commit (policy + check)..."
 
-# Run cxgrd check on staged files
-if ! cxgrd check "$PROJECT_ROOT" --staged; then
+# Team policy + blast radius + check (falls back to check-only on Free/Pro)
+if ! cxgrd team precommit "$PROJECT_ROOT"; then
   echo "Architecture check failed. Commit blocked."
   exit 1
 fi
@@ -120,8 +120,8 @@ exit 0
     const batScript = `@echo off
     git diff --cached --name-only --diff-filter=ACMRUXB > nul 2>&1
     if %errorlevel% neq 0 exit /b 0
-    echo Running cxgrd architecture check...
-    cxgrd check --staged
+    echo Running cxgrd team precommit...
+    cxgrd team precommit
     if %errorlevel% neq 0 (
     echo Architecture check failed. Commit blocked.
     exit /b 1

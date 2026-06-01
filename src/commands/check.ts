@@ -4,6 +4,8 @@ import chalk from 'chalk';
 import { runCheck } from '../check/check-runner';
 import { resolveScopeFiles } from '../check/scope';
 import type { CheckScope } from '../check/types';
+import { resolveActiveSession } from '../auth/auth-session';
+import { recordAuditEventIfTeam } from '../team/audit';
 
 export interface CheckCommandOptions {
   scope?: CheckScope;
@@ -116,6 +118,18 @@ export async function checkCommand(
       issues: result.issues,
       compiler: result.compilerSummary,
       summary: result.summary,
+    });
+
+    const session = await resolveActiveSession();
+    await recordAuditEventIfTeam(session, rootPath, {
+      eventType: 'check',
+      passed: result.passed,
+      summary: result.summary,
+      metadata: {
+        issueCount: result.issues.length,
+        scope,
+        strict: options.strict ?? false,
+      },
     });
 
     if (!result.passed) {

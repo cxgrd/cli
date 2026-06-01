@@ -9,6 +9,12 @@ describe('plans', () => {
     assert.equal(planIncludesFeature('free', 'prompt'), false);
   });
 
+  it('enables team cloud only for team and enterprise', () => {
+    assert.equal(planIncludesFeature('team', 'team_cloud'), true);
+    assert.equal(planIncludesFeature('pro', 'team_cloud'), false);
+    assert.equal(planIncludesFeature('enterprise', 'audit_events'), true);
+  });
+
   it('normalizes plan names case-insensitively', () => {
     assert.equal(normalizePlan('invalid'), 'free');
     assert.equal(normalizePlan('PRO'), 'pro');

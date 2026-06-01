@@ -4,6 +4,8 @@ import { BlastRadiusAnalyzer } from '../utils/blast-radius-analyzer';
 import { ChangeDetector } from '../utils/change-detector';
 import { RichOutput, CLIFormatter } from '../utils/cli-formatter';
 import { appendMemorySession } from '../memory/repo-memory';
+import { resolveActiveSession } from '../auth/auth-session';
+import { recordAuditEventIfTeam } from '../team/audit';
 
 export async function inputCommand(description: string, projectPath?: string): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
@@ -67,6 +69,15 @@ export async function inputCommand(description: string, projectPath?: string): P
     });
 
     RichOutput.success('Blast radius analysis saved to history');
+
+    const session = await resolveActiveSession();
+    await recordAuditEventIfTeam(session, rootPath, {
+      eventType: 'input',
+      riskScore: result.totalRisk,
+      riskLevel: result.riskLevel,
+      affectedCount: result.affectedFiles.length,
+      summary: description.slice(0, 200),
+    });
   } catch (err: any) {
     RichOutput.error(err.message);
     process.exit(1);

@@ -2,6 +2,13 @@ import { randomUUID } from 'crypto';
 import { envString } from '../config/env';
 import { readAuth, type StoredAuth } from './auth-store';
 import { normalizePlan, type SubscriptionPlan } from './plans';
+import type { OrgRole } from '../team/types';
+
+function normalizeRole(role: string | undefined): OrgRole {
+  const r = (role || 'member').toLowerCase();
+  if (r === 'lead' || r === 'admin') return r;
+  return 'member';
+}
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -11,6 +18,9 @@ export interface ActiveSession {
   plan: SubscriptionPlan;
   source: 'auth_file' | 'dev_override';
   email?: string;
+  orgId?: string;
+  orgName?: string;
+  role: OrgRole;
 }
 
 export async function resolveActiveSession(): Promise<ActiveSession | null> {
@@ -22,6 +32,9 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
         token: envString('CXGRD_DEV_TOKEN', 'dev-local'),
         plan,
         source: 'dev_override',
+        orgId: envString('CXGRD_DEV_ORG_ID', 'org_dev'),
+        orgName: envString('CXGRD_DEV_ORG_NAME', 'Dev Org'),
+        role: normalizeRole(envString('CXGRD_DEV_ROLE', 'member')),
       };
     }
   }
@@ -34,6 +47,9 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
     plan: stored.plan,
     source: 'auth_file',
     email: stored.email,
+    orgId: stored.orgId,
+    orgName: stored.orgName,
+    role: normalizeRole(stored.role),
   };
 }
 
@@ -69,6 +85,11 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
       access_token?: string;
       plan?: string;
       email?: string;
+      org_id?: string;
+      orgId?: string;
+      org_name?: string;
+      orgName?: string;
+      role?: string;
       expires_at?: number;
       expiresAt?: number;
     };
@@ -83,6 +104,9 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
       token,
       plan: normalizePlan(data.plan),
       email: data.email,
+      orgId: data.org_id ?? data.orgId,
+      orgName: data.org_name ?? data.orgName,
+      role: normalizeRole(data.role),
       expiresAt: data.expires_at ?? data.expiresAt,
       obtainedAt: Date.now(),
     };

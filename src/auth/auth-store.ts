@@ -3,12 +3,16 @@ import { homedir } from 'os';
 import { join } from 'path';
 import type { SubscriptionPlan } from './plans';
 import { normalizePlan } from './plans';
+import type { OrgRole } from '../team/types';
 
 export interface StoredAuth {
   token: string;
   plan: SubscriptionPlan;
   expiresAt?: number;
   email?: string;
+  orgId?: string;
+  orgName?: string;
+  role?: OrgRole;
   obtainedAt: number;
 }
 

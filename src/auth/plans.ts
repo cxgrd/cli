@@ -3,6 +3,9 @@ export type SubscriptionPlan = 'free' | 'pro' | 'team' | 'enterprise';
 export const PRO_FEATURES = ['prompt', 'repo_memory'] as const;
 export type ProFeature = (typeof PRO_FEATURES)[number];
 
+export const TEAM_FEATURES = ['team_cloud', 'org_policies', 'audit_events'] as const;
+export type TeamFeature = (typeof TEAM_FEATURES)[number];
+
 export function normalizePlan(plan: string | undefined): SubscriptionPlan {
   const p = (plan || 'free').toLowerCase();
   if (p === 'pro' || p === 'team' || p === 'enterprise') {
@@ -11,11 +14,21 @@ export function normalizePlan(plan: string | undefined): SubscriptionPlan {
   return 'free';
 }
 
-export function planIncludesFeature(plan: SubscriptionPlan, feature: ProFeature): boolean {
+export function planIncludesFeature(
+  plan: SubscriptionPlan,
+  feature: ProFeature | TeamFeature,
+): boolean {
   if (feature === 'prompt' || feature === 'repo_memory') {
     return plan === 'pro' || plan === 'team' || plan === 'enterprise';
   }
+  if (feature === 'team_cloud' || feature === 'org_policies' || feature === 'audit_events') {
+    return plan === 'team' || plan === 'enterprise';
+  }
   return false;
+}
+
+export function isTeamOrEnterprise(plan: SubscriptionPlan): boolean {
+  return plan === 'team' || plan === 'enterprise';
 }
 
 export function planDisplayName(plan: SubscriptionPlan): string {
