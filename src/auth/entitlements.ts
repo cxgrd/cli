@@ -34,7 +34,7 @@ export async function requireProFeature(feature: ProFeature): Promise<ActiveSess
   if (!session) {
     throw new ProRequiredError(
       `This feature requires a Pro, Team, or Enterprise plan.\n` +
-        `  Run ${chalk.cyan('cxgrd auth login')} or visit https://cxgrd.dev/upgrade\n` +
+        `  Run ${chalk.cyan('cxgrd auth login')} or visit https://cxgrd.com/pricing\n` +
         `  Local dev: set CXGRD_DEV_PLAN=pro in .env (see .env.example)`,
       feature,
     );
@@ -43,7 +43,7 @@ export async function requireProFeature(feature: ProFeature): Promise<ActiveSess
   if (!planIncludesFeature(session.plan, feature)) {
     throw new ProRequiredError(
       `Your plan (${planDisplayName(session.plan)}) does not include this feature.\n` +
-        `  Upgrade at https://cxgrd.dev/upgrade`,
+        `  Upgrade at https://cxgrd.com/pricing`,
       feature,
     );
   }
@@ -66,7 +66,7 @@ export async function requireTeamFeature(feature: TeamFeature): Promise<ActiveSe
   if (!planIncludesFeature(session.plan, feature)) {
     throw new TeamRequiredError(
       `Your plan (${planDisplayName(session.plan)}) does not include team features.\n` +
-        `  Upgrade at https://cxgrd.dev/upgrade`,
+        `  Upgrade at https://cxgrd.com/pricing`,
       feature,
     );
   }

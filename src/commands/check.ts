@@ -6,6 +6,12 @@ import { resolveScopeFiles } from '../check/scope';
 import type { CheckScope } from '../check/types';
 import { resolveActiveSession } from '../auth/auth-session';
 import { recordAuditEventIfTeam } from '../team/audit';
+import {
+  checkFreeAuditLimit,
+  incrementAuditCount,
+  printAuditUsageStatus,
+  AuditUsageExceededError,
+} from '../auth/audit-usage';
 
 export interface CheckCommandOptions {
   scope?: CheckScope;
@@ -30,6 +36,20 @@ export async function checkCommand(
   }
 
   try {
+    // Check free tier audit limit before running
+    const session = await resolveActiveSession();
+    if (!session || session.plan === 'free') {
+      try {
+        await checkFreeAuditLimit();
+      } catch (err) {
+        if (err instanceof AuditUsageExceededError) {
+          console.error(chalk.red(`\n✗ ${err.message}`));
+          process.exit(1);
+        }
+        throw err;
+      }
+    }
+
     const cgDir = new CgDirectory(rootPath);
     const graph = await cgDir.readGraph();
     const arch = await cgDir.readArch();
@@ -98,6 +118,12 @@ export async function checkCommand(
       console.log(chalk.gray(`   ${result.summary}`));
     }
 
+    // Increment audit count after successful run (for free tier tracking)
+    if (!session || session.plan === 'free') {
+      await incrementAuditCount();
+      await printAuditUsageStatus();
+    }
+
     const historyEntry = {
       timestamp: Date.now(),
       type: 'check',
@@ -120,7 +146,6 @@ export async function checkCommand(
       summary: result.summary,
     });
 
-    const session = await resolveActiveSession();
     await recordAuditEventIfTeam(session, rootPath, {
       eventType: 'check',
       passed: result.passed,

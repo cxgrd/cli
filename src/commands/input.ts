@@ -6,6 +6,12 @@ import { RichOutput, CLIFormatter } from '../utils/cli-formatter';
 import { appendMemorySession } from '../memory/repo-memory';
 import { resolveActiveSession } from '../auth/auth-session';
 import { recordAuditEventIfTeam } from '../team/audit';
+import {
+  checkFreeAuditLimit,
+  incrementAuditCount,
+  printAuditUsageStatus,
+  AuditUsageExceededError,
+} from '../auth/audit-usage';
 
 export async function inputCommand(description: string, projectPath?: string): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
@@ -14,6 +20,18 @@ export async function inputCommand(description: string, projectPath?: string): P
   RichOutput.info(`Analyzing change: "${description}"`);
 
   try {
+    const session = await resolveActiveSession();
+    if (!session || session.plan === 'free') {
+      try {
+        await checkFreeAuditLimit();
+      } catch (err) {
+        if (err instanceof AuditUsageExceededError) {
+          RichOutput.error(err.message);
+          process.exit(1);
+        }
+        throw err;
+      }
+    }
     const cgDir = new CgDirectory(rootPath);
     const graph = await cgDir.readGraph();
 
@@ -70,7 +88,10 @@ export async function inputCommand(description: string, projectPath?: string): P
 
     RichOutput.success('Blast radius analysis saved to history');
 
-    const session = await resolveActiveSession();
+    if (!session || session.plan === 'free') {
+      await incrementAuditCount();
+      await printAuditUsageStatus();
+    }
     await recordAuditEventIfTeam(session, rootPath, {
       eventType: 'input',
       riskScore: result.totalRisk,

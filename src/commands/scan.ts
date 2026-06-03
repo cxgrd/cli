@@ -9,6 +9,12 @@ import { appendMemorySession } from '../memory/repo-memory';
 import { resolveActiveSession } from '../auth/auth-session';
 import { planIncludesFeature } from '../auth/plans';
 import { syncPush } from '../team/graph-sync';
+import {
+  checkFreeAuditLimit,
+  incrementAuditCount,
+  printAuditUsageStatus,
+  AuditUsageExceededError,
+} from '../auth/audit-usage';
 
 export interface ScanCommandOptions {
   sync?: boolean;
@@ -24,6 +30,20 @@ export async function scanCommand(
   console.log(chalk.gray(`   Path: ${rootPath}`));
 
   try {
+    // Check free tier audit limit before running
+    const session = await resolveActiveSession();
+    if (!session || session.plan === 'free') {
+      try {
+        await checkFreeAuditLimit();
+      } catch (err) {
+        if (err instanceof AuditUsageExceededError) {
+          console.error(chalk.red(`\n✗ ${err.message}`));
+          process.exit(1);
+        }
+        throw err;
+      }
+    }
+
     const cgDir = new CgDirectory(rootPath);
     const previousGraph = await cgDir.readGraph();
     const previousPatterns = await cgDir.readPatterns();
@@ -99,13 +119,19 @@ export async function scanCommand(
     console.log(chalk.green('✓ Scan complete!'));
     console.log(chalk.green('✓ Updated .cg/ (graph, symbols, arch, patterns, memory)'));
 
-    const session = await resolveActiveSession();
+    // Increment audit count after successful scan (for free tier tracking)
+    if (!session || session.plan === 'free') {
+      await incrementAuditCount();
+      await printAuditUsageStatus();
+    }
+
+    // Auto-sync if user has cloud_sync feature and opts in
     const shouldSync =
-      options.sync || (session && planIncludesFeature(session.plan, 'team_cloud') && session.orgId);
-    if (shouldSync && session?.orgId) {
+      options.sync || (session && planIncludesFeature(session.plan, 'cloud_sync'));
+    if (shouldSync && session) {
       try {
         await syncPush(cgDir, rootPath, session);
-        console.log(chalk.green('✓ Synced graph to org cloud'));
+        console.log(chalk.green('✓ Synced graph to cloud'));
       } catch (syncErr: unknown) {
         const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
         console.log(chalk.yellow(`   Sync skipped: ${msg}`));

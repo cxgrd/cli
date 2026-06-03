@@ -24,10 +24,11 @@ export async function readAuth(): Promise<StoredAuth | null> {
     const raw = await readFile(AUTH_PATH, 'utf-8');
     const data = JSON.parse(raw) as StoredAuth;
     if (!data.token) return null;
-    if (data.expiresAt && Date.now() > data.expiresAt) {
+    const expiresAt = normalizeExpiry(data.expiresAt);
+    if (expiresAt && Date.now() > expiresAt) {
       return null;
     }
-    return { ...data, plan: normalizePlan(data.plan) };
+    return { ...data, plan: normalizePlan(data.plan), expiresAt };
   } catch {
     return null;
   }
@@ -48,4 +49,11 @@ export async function clearAuth(): Promise<void> {
 
 export function getAuthPath(): string {
   return AUTH_PATH;
+}
+
+function normalizeExpiry(expiresAt: number | undefined): number | undefined {
+  if (!expiresAt || Number.isNaN(expiresAt)) {
+    return undefined;
+  }
+  return expiresAt < 1_000_000_000_000 ? expiresAt * 1000 : expiresAt;
 }

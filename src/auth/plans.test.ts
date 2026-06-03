@@ -5,6 +5,8 @@ import { normalizePlan, planIncludesFeature } from './plans';
 describe('plans', () => {
   it('enables prompt for pro and above', () => {
     assert.equal(planIncludesFeature('pro', 'prompt'), true);
+    assert.equal(planIncludesFeature('pro', 'api_access'), true);
+    assert.equal(planIncludesFeature('pro', 'advanced_analysis'), true);
     assert.equal(planIncludesFeature('team', 'prompt'), true);
     assert.equal(planIncludesFeature('free', 'prompt'), false);
   });

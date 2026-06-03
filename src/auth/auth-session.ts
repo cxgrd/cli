@@ -107,12 +107,14 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
       orgId: data.org_id ?? data.orgId,
       orgName: data.org_name ?? data.orgName,
       role: normalizeRole(data.role),
-      expiresAt: data.expires_at ?? data.expiresAt,
+      expiresAt: normalizeExpiry(data.expires_at ?? data.expiresAt),
       obtainedAt: Date.now(),
     };
 
     if (auth.plan === 'free') {
-      throw new Error('Account is on the Free plan. Upgrade to Pro to use prompt generation.');
+      throw new Error(
+        'Account is on the Free plan. Upgrade at https://cxgrd.com/upgrade, then run cxgrd auth login again.',
+      );
     }
 
     return auth;
@@ -132,4 +134,12 @@ export function buildCliAuthUrl(sessionId: string): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function normalizeExpiry(expiresAt: number | undefined): number | undefined {
+  if (!expiresAt || Number.isNaN(expiresAt)) {
+    return undefined;
+  }
+  // Accept either epoch seconds or milliseconds from the API.
+  return expiresAt < 1_000_000_000_000 ? expiresAt * 1000 : expiresAt;
 }
