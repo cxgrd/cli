@@ -12,9 +12,7 @@ import { watchCommand } from './commands/watch';
 import { doctorCommand } from './commands/doctor';
 import { authLoginCommand, authLogoutCommand, authStatusCommand } from './commands/auth';
 import { loadCxgrdEnv } from './config/env';
-import { syncPushCommand, syncPullCommand, syncStatusCommand } from './commands/sync';
-import { orgStatusCommand, orgPolicyRefreshCommand, orgPolicyShowCommand } from './commands/org';
-import { teamPrecommitCommand } from './commands/team-precommit';
+
 
 async function main() {
   await loadCxgrdEnv();
@@ -190,72 +188,7 @@ async function main() {
           });
         },
       )
-      .command('sync', 'Shared org dependency graph (Team / Enterprise)', (y: any) =>
-        y
-          .command(
-            'push [path]',
-            'Upload local .cg graph to org cloud',
-            (yy: any) => yy.positional('path', { type: 'string' }),
-            async (argv: any) => {
-              await syncPushCommand(argv.path as string);
-            },
-          )
-          .command(
-            'pull [path]',
-            'Download org graph into local .cg',
-            (yy: any) => yy.positional('path', { type: 'string' }),
-            async (argv: any) => {
-              await syncPullCommand(argv.path as string);
-            },
-          )
-          .command(
-            'status [path]',
-            'Compare local vs remote graph',
-            (yy: any) => yy.positional('path', { type: 'string' }),
-            async (argv: any) => {
-              await syncStatusCommand(argv.path as string);
-            },
-          )
-          .demandCommand(1, 'Specify sync push, pull, or status')
-          .help(),
-      )
-      .command('org', 'Organization settings (Team / Enterprise)', (y: any) =>
-        y
-          .command('status', 'Show org membership and plan', {}, async () => {
-            await orgStatusCommand();
-          })
-          .command(
-            'policy-refresh [path]',
-            'Fetch and cache org audit policy',
-            (yy: any) => yy.positional('path', { type: 'string' }),
-            async (argv: any) => {
-              await orgPolicyRefreshCommand(argv.path as string);
-            },
-          )
-          .command(
-            'policy-show [path]',
-            'Print cached org policy JSON',
-            (yy: any) => yy.positional('path', { type: 'string' }),
-            async (argv: any) => {
-              await orgPolicyShowCommand(argv.path as string);
-            },
-          )
-          .demandCommand(1, 'Specify org status, policy-refresh, or policy-show')
-          .help(),
-      )
-      .command('team', 'Team workflows', (y: any) =>
-        y
-          .command(
-            'precommit [path]',
-            'Pre-commit: org policy + blast radius + check',
-            (yy: any) => yy.positional('path', { type: 'string' }),
-            async (argv: any) => {
-              await teamPrecommitCommand(argv.path as string);
-            },
-          )
-          .demandCommand(1, 'Specify team precommit')
-          .help(),
-      )
+      
       .command(
         'watch [path]',
         'Monitor project for real-time architecture analysis',

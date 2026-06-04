@@ -1,17 +1,23 @@
 {
-  "name": "cxgrd-cli",
+  "name": "cxgrd",
   "version": "0.1.0",
-  "description": "AI context guardrail CLI - dependency-aware AI coding safety",
+  "description": "AI context guardrail CLI — dependency-aware architecture safety for AI-assisted development",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "cxgrd": "dist/index.js"
   },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "test": "tsx --test src/**/*.test.ts"
+    "test": "tsx --test src/**/*.test.ts",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "yargs": "^17.7.2",
@@ -26,5 +32,25 @@
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "keywords": [
+    "cli",
+    "ai",
+    "architecture",
+    "dependency-graph",
+    "blast-radius",
+    "code-safety",
+    "developer-tools",
+    "context-guard"
+  ],
+  "author": "Manan Sharma",
+  "license": "MIT",
+  "homepage": "https://cxgrd.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cxgrd/cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/cxgrd/cli/issues"
   }
 }

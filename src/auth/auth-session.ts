@@ -24,6 +24,7 @@ export interface ActiveSession {
 }
 
 export async function resolveActiveSession(): Promise<ActiveSession | null> {
+  // Dev override — lets you test pro/team locally without real auth
   const devPlan = envString('CXGRD_DEV_PLAN');
   if (devPlan) {
     const plan = normalizePlan(devPlan);
@@ -47,6 +48,7 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
     plan: stored.plan,
     source: 'auth_file',
     email: stored.email,
+    // orgId/orgName/role only populated for team/enterprise — undefined for free+pro
     orgId: stored.orgId,
     orgName: stored.orgName,
     role: normalizeRole(stored.role),
@@ -66,10 +68,11 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
 
     if (response.status === 404 || response.status === 501) {
       throw new Error(
-        'Auth API is not available yet (website routes pending). For local development set CXGRD_DEV_PLAN=pro in .env',
+        'Auth API is not available yet. For local dev set CXGRD_DEV_PLAN=pro in .env',
       );
     }
 
+    // 202 = still pending, user hasn't completed GitHub login yet
     if (response.status === 202) {
       await sleep(POLL_INTERVAL_MS);
       continue;
@@ -104,6 +107,7 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
       token,
       plan: normalizePlan(data.plan),
       email: data.email,
+      // these are only set for team/enterprise accounts
       orgId: data.org_id ?? data.orgId,
       orgName: data.org_name ?? data.orgName,
       role: normalizeRole(data.role),
@@ -111,16 +115,11 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
       obtainedAt: Date.now(),
     };
 
-    if (auth.plan === 'free') {
-      throw new Error(
-        'Account is on the Free plan. Upgrade at https://cxgrd.com/upgrade, then run cxgrd auth login again.',
-      );
-    }
-
+    // Free and pro users both get a token — feature gates are enforced per-command
     return auth;
   }
 
-  throw new Error('Timed out waiting for browser login. Try again or use CXGRD_DEV_PLAN=pro for local dev.');
+  throw new Error('Timed out waiting for browser login. Try again.');
 }
 
 export function createCliSessionId(): string {
@@ -137,9 +136,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function normalizeExpiry(expiresAt: number | undefined): number | undefined {
-  if (!expiresAt || Number.isNaN(expiresAt)) {
-    return undefined;
-  }
-  // Accept either epoch seconds or milliseconds from the API.
+  if (!expiresAt || Number.isNaN(expiresAt)) return undefined;
+  // accept either epoch seconds or milliseconds
   return expiresAt < 1_000_000_000_000 ? expiresAt * 1000 : expiresAt;
 }
