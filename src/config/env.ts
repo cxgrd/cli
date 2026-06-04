@@ -1,10 +1,10 @@
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { homedir } from 'os';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { join } from 'path';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
+// In CommonJS (which this project uses), __dirname is a built-in global.
+// No need to construct it from import.meta.url (that's ESM-only).
 
 let loaded = false;
 
