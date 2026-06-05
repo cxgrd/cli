@@ -24,7 +24,6 @@ export interface ActiveSession {
 }
 
 export async function resolveActiveSession(): Promise<ActiveSession | null> {
-  // Dev override — lets you test pro/team locally without real auth
   const devPlan = envString('CXGRD_DEV_PLAN');
   if (devPlan) {
     const plan = normalizePlan(devPlan);
@@ -48,7 +47,6 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
     plan: stored.plan,
     source: 'auth_file',
     email: stored.email,
-    // orgId/orgName/role only populated for team/enterprise — undefined for free+pro
     orgId: stored.orgId,
     orgName: stored.orgName,
     role: normalizeRole(stored.role),
@@ -61,21 +59,41 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
   const started = Date.now();
 
   while (Date.now() - started < POLL_TIMEOUT_MS) {
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json' },
-    });
+    let response: Response;
 
-    if (response.status === 404 || response.status === 501) {
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
+    } catch {
+      // Network error — wait and retry
+      await sleep(POLL_INTERVAL_MS);
+      continue;
+    }
+
+    // 501 = server not configured — hard stop
+    if (response.status === 501) {
       throw new Error(
         'Auth API is not available yet. For local dev set CXGRD_DEV_PLAN=pro in .env',
       );
+    }
+
+    // 404 = session not found yet — retry (brief race condition on first poll)
+    if (response.status === 404) {
+      await sleep(POLL_INTERVAL_MS);
+      continue;
     }
 
     // 202 = still pending, user hasn't completed GitHub login yet
     if (response.status === 202) {
       await sleep(POLL_INTERVAL_MS);
       continue;
+    }
+
+    // 410 = session expired
+    if (response.status === 410) {
+      throw new Error('Session expired. Run cxgrd auth login again.');
     }
 
     if (!response.ok) {
@@ -103,20 +121,16 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
       continue;
     }
 
-    const auth: StoredAuth = {
+    return {
       token,
       plan: normalizePlan(data.plan),
       email: data.email,
-      // these are only set for team/enterprise accounts
       orgId: data.org_id ?? data.orgId,
       orgName: data.org_name ?? data.orgName,
       role: normalizeRole(data.role),
       expiresAt: normalizeExpiry(data.expires_at ?? data.expiresAt),
       obtainedAt: Date.now(),
     };
-
-    // Free and pro users both get a token — feature gates are enforced per-command
-    return auth;
   }
 
   throw new Error('Timed out waiting for browser login. Try again.');
@@ -137,6 +151,5 @@ function sleep(ms: number): Promise<void> {
 
 function normalizeExpiry(expiresAt: number | undefined): number | undefined {
   if (!expiresAt || Number.isNaN(expiresAt)) return undefined;
-  // accept either epoch seconds or milliseconds
   return expiresAt < 1_000_000_000_000 ? expiresAt * 1000 : expiresAt;
 }

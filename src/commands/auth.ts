@@ -1,6 +1,6 @@
 import chalk from 'chalk';
-import { loadCxgrdEnv } from '../config/env';
-import { clearAuth, getAuthPath, readAuth } from '../auth/auth-store';
+import { loadCxgrdEnv, envString } from '../config/env';
+import { clearAuth, getAuthPath, readAuth, writeAuth } from '../auth/auth-store';
 import {
   buildCliAuthUrl,
   createCliSessionId,
@@ -9,7 +9,22 @@ import {
 } from '../auth/auth-session';
 import { openBrowser } from '../auth/open-browser';
 import { printSessionStatus } from '../auth/entitlements';
-import { writeAuth } from '../auth/auth-store';
+
+async function initiateSession(sessionId: string): Promise<void> {
+  const baseUrl = envString('CXGRD_AUTH_BASE_URL', 'https://cxgrd.com').replace(/\/$/, '');
+  const url = `${baseUrl}/api/auth/cli/initiate`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Failed to initiate session (${response.status}): ${body || response.statusText}`);
+  }
+}
 
 export async function authLoginCommand(): Promise<void> {
   await loadCxgrdEnv();
@@ -20,6 +35,16 @@ export async function authLoginCommand(): Promise<void> {
   console.log(chalk.blue('✓ Opening browser for GitHub sign-in...'));
   console.log(chalk.gray(`   Session: ${sessionId.slice(0, 8)}...`));
   console.log(chalk.gray(`   If the browser does not open: ${url}\n`));
+
+  // Register the session on the server BEFORE opening browser and polling
+  try {
+    await initiateSession(sessionId);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(chalk.red(`\n✗ Could not reach auth server: ${message}`));
+    console.error(chalk.gray('  For local dev: set CXGRD_DEV_PLAN=pro in .env'));
+    process.exit(1);
+  }
 
   openBrowser(url);
 
