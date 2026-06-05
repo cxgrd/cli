@@ -74,6 +74,8 @@ async function callCloudPromptApi(
     console.log("End");
   }   
 
+  example();
+
   if (response.status === 404 || response.status === 501) {
     throw new Error(
       'Cloud prompt API is not deployed yet. Use CXGRD_LLM_API_KEY in .env for direct LLM access during development.',
