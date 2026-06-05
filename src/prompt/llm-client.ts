@@ -24,13 +24,17 @@ export async function generatePromptWithLlm(
   session: ActiveSession,
 ): Promise<LlmResult> {
   const apiKey = envString('CXGRD_LLM_API_KEY');
-  const cloudUrl = envString('CXGRD_PROMPT_API_URL');
 
-  if (cloudUrl && session.source === 'auth_file') {
+  // Default to production cloud endpoint — API key lives on server, never on client
+  const cloudUrl = envString('CXGRD_PROMPT_API_URL', 'https://cxgrd.com/api/prompt');
+
+  // Logged-in users always hit the cloud endpoint first
+  if (session.source === 'auth_file') {
     try {
       return await callCloudPromptApi(cloudUrl, contextPayload, session.token);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // Fall back to direct LLM only if dev has a local key AND cloud isn't deployed
       if (apiKey && message.includes('not deployed')) {
         return callDirectLlm(contextPayload, apiKey);
       }
@@ -38,12 +42,13 @@ export async function generatePromptWithLlm(
     }
   }
 
+  // Dev override path (CXGRD_DEV_PLAN set) — needs a local API key
   if (apiKey) {
     return callDirectLlm(contextPayload, apiKey);
   }
 
   throw new Error(
-    'No LLM configured. Set CXGRD_LLM_API_KEY in .env (see .env.example) or sign in and use the cloud API when available.',
+    'No LLM configured. Run cxgrd auth login to use the cloud API, or set CXGRD_LLM_API_KEY in .env for local dev.',
   );
 }
 
@@ -64,6 +69,16 @@ async function callCloudPromptApi(
   if (response.status === 404 || response.status === 501) {
     throw new Error(
       'Cloud prompt API is not deployed yet. Use CXGRD_LLM_API_KEY in .env for direct LLM access during development.',
+    );
+  }
+
+  if (response.status === 401) {
+    throw new Error('Session expired. Run cxgrd auth login again.');
+  }
+
+  if (response.status === 403) {
+    throw new Error(
+      'This feature requires a Pro plan. Visit https://cxgrd.com/pricing to upgrade.',
     );
   }
 
