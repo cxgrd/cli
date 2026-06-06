@@ -24,17 +24,13 @@ export async function generatePromptWithLlm(
   session: ActiveSession,
 ): Promise<LlmResult> {
   const apiKey = envString('CXGRD_LLM_API_KEY');
-
-  // Default to production cloud endpoint — API key lives on server, never on client
   const cloudUrl = envString('CXGRD_PROMPT_API_URL', 'https://cxgrd.com/api/prompt');
 
-  // Logged-in users always hit the cloud endpoint first
   if (session.source === 'auth_file') {
     try {
       return await callCloudPromptApi(cloudUrl, contextPayload, session.token);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      // Fall back to direct LLM only if dev has a local key AND cloud isn't deployed
       if (apiKey && message.includes('not deployed')) {
         return callDirectLlm(contextPayload, apiKey);
       }
@@ -42,7 +38,6 @@ export async function generatePromptWithLlm(
     }
   }
 
-  // Dev override path (CXGRD_DEV_PLAN set) — needs a local API key
   if (apiKey) {
     return callDirectLlm(contextPayload, apiKey);
   }
@@ -61,15 +56,15 @@ async function callCloudPromptApi(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
+      // Send token in both headers — some proxies strip Authorization on POST
+      'Authorization': `Bearer ${token}`,
+      'x-cxgrd-token': token,
     },
     body: JSON.stringify({ context }),
   });
 
   if (response.status === 404 || response.status === 501) {
-    throw new Error(
-      'Cloud prompt API is not deployed yet. Use CXGRD_LLM_API_KEY in .env for direct LLM access during development.',
-    );
+    throw new Error('Cloud prompt API is not deployed yet.');
   }
 
   if (response.status === 401) {
@@ -113,7 +108,7 @@ async function callDirectLlm(context: string, apiKey: string): Promise<LlmResult
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
       model,
