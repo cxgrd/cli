@@ -73,6 +73,7 @@ async function callCloudPromptApi(
   }
 
   if (response.status === 401) {
+    throw response.body
     throw new Error('Session expired. Run cxgrd auth login again.');
   }
 
