@@ -1,221 +1,180 @@
-# CXGRD CLI 
+# CXGRD CLI
 
-The TypeScript CLI provides user-friendly commands for dependency analysis and AI-safe code changes.
+> Make AI-assisted code changes without breaking your codebase.
+> **[cxgrd.com](https://cxgrd.com)**
 
-## CLI Commands
+---
 
-### cxgrd scan [path]
-**Purpose:** Build complete dependency graph
+## What is CXGRD?
 
-**Syntax:**
+Modern codebases are deeply interconnected — changing one file can silently break a dozen others. When you ask an AI assistant to refactor a service or add a feature, it typically has no awareness of your project's dependency graph, architectural layers, or downstream impact.
+
+**CXGRD** solves this. It scans your project and builds a complete dependency graph, then uses that graph to:
+
+- **Tell you exactly what will break** before you make a change
+- **Enrich your AI prompts** with architectural context so the AI makes safer, smarter suggestions
+- **Validate your code** for circular dependencies, orphaned files, and layer violations — both structurally and with compiler-backed checks
+
+Think of it as giving your AI assistant a map of your codebase before it starts digging.
+
+---
+
+## Installation
+
 ```bash
-cxgrd scan [projectPath]
-```
-
-**Options:**
-- `projectPath` (optional): Path to analyze (default: current directory)
-
-**Output:**
-Creates `.cg/` directory containing:
-- `graph.json` - Full dependency graph
-- `symbols.json` - Exported symbols per file
-- `arch.json` - Inferred architectural layers
-- `meta.json` - Scan metadata
-- `history.json` - Operation history
-- `patterns.json` - Pattern analysis
-
-**Example:**
-```bash
-cxgrd scan /path/to/myapp
+npm install -g cxgrd
 ```
 
 ---
 
-### cxgrd input <description>
-**Purpose:** Analyze blast radius of a change
+## Core Commands
 
-**Syntax:**
+### `cxgrd auth login`
+**Authenticate with CXGRD before first use.**
+
 ```bash
-cxgrd input "description" [--path /project/path]
+cxgrd auth login
 ```
 
-**Options:**
-- `description` (required): What you're planning to change
-- `--path` or `-p` (optional): Project path
+---
 
-**Output:**
-- List of affected files
-- Severity levels (high/medium/low)
-- Why each file is affected
-- Total downstream impact
+### `cxgrd scan [path]`
+**Build a complete dependency graph of your project.**
 
-**Example:**
+This is the first command to run. It recursively analyzes your source files and produces a `.cg/` directory containing the full dependency graph, exported symbols, architectural layers, and metadata.
+
+```bash
+cxgrd scan                        # scan current directory
+cxgrd scan /path/to/myapp         # scan a specific project
+```
+
+**What gets created in `.cg/`:**
+
+| File | Description |
+|---|---|
+| `graph.json` | Full dependency graph |
+| `symbols.json` | Exported symbols per file |
+| `arch.json` | Inferred architectural layers |
+| `meta.json` | Scan metadata |
+| `history.json` | Operation history |
+| `patterns.json` | Pattern analysis |
+
+---
+
+### `cxgrd input "<description>"`
+**Analyze the blast radius of a planned change.**
+
+Before touching any code, describe what you're planning to change. CXGRD will tell you every file that will be affected, why it's affected, and how severe the impact is.
+
 ```bash
 cxgrd input "rename AuthService to AuthController" --path /myapp
 ```
 
+**Output includes:**
+- List of affected files
+- Severity levels (high / medium / low)
+- Reason each file is impacted
+- Total downstream impact count
+
+Use this before making any significant refactor or before handing a task off to an AI assistant.
+
 ---
 
-### cxgrd prompt <description>
-**Purpose:** Generate enriched AI prompt
+### `cxgrd prompt "<description>"`
+**Generate an architecturally-aware prompt for your AI assistant.**
 
-**Syntax:**
-```bash
-cxgrd prompt "description" [--path /project/path]
-```
+Instead of giving your AI a vague instruction, CXGRD generates an enriched prompt that includes the relevant modules, symbols, dependencies, and architectural constraints. Your AI gets the full picture — not just your words.
 
-**Options:**
-- `description` (required): What you want to build
-- `--path` or `-p` (optional): Project path
-
-**Output:**
-- Original request
-- Affected modules
-- Architectural considerations
-- Related symbols to consider
-- Key dependencies
-- AI-friendly recommendations
-
-**Example:**
 ```bash
 cxgrd prompt "add OAuth2 authentication" --path /myapp
 ```
 
+**The generated prompt includes:**
+- Your original request
+- Affected modules and files
+- Architectural considerations
+- Related symbols to be aware of
+- Key dependencies
+- AI-friendly recommendations
+
+Paste the output directly into Claude, ChatGPT, Cursor, or any AI tool.
+
 ---
 
-### cxgrd check [path]
-**Purpose:** Structural graph validation + compiler-backed semantic checks
+## Additional Commands
 
-**Syntax:**
+### `cxgrd check [path]`
+Validates your project structurally and with compiler-backed checks. Catches circular dependencies, orphaned files, layer violations, and type/syntax errors.
+
 ```bash
-cxgrd check [projectPath] [--staged] [--changed] [--skip-compiler] [--skip-structural]
+cxgrd check .
+cxgrd check . --staged        # only staged files (great for pre-commit hooks)
+cxgrd check . --strict        # fail if compiler tools are missing (recommended for CI)
 ```
 
-**Options:**
-- `projectPath` (optional): Path to analyze
-- `--staged`: Only report issues in git staged files (used by pre-commit hooks)
-- `--changed`: Staged + unstaged changed files
-- `--skip-compiler`: Structural checks only
-- `--skip-structural`: Compiler checks only
-- `--strict`: Fail if a detected language's compiler was skipped (recommended for CI)
+Supports TypeScript, Python (Pyright), and Rust (cargo check) out of the box.
 
-**Compiler tools (auto-detected per project):**
-- TypeScript — programmatic `typescript` API per `tsconfig.json`
-- Python — `pyright --outputjson` (skipped if pyright not on PATH)
-- Rust — `cargo check --message-format=json`
+### `cxgrd doctor [path]`
+Verifies your toolchain is ready before enabling strict checks.
 
-**Output:**
-- Structural: circular deps, orphans, layer violations
-- Compiler: type/syntax errors with file, line, and diagnostic code
-- `.cg/check-latest.json` with full result payload
-
-**Examples:**
 ```bash
-cxgrd check /myapp
-cxgrd check . --staged
-cxgrd check . --skip-structural
-cxgrd check . --strict          # CI: fail if Pyright/cargo missing on detected projects
-cxgrd doctor .                  # verify toolchain before enabling --strict
+cxgrd doctor          # check global toolchain
+cxgrd doctor .        # check project-specific readiness
 ```
 
-### cxgrd doctor [path]
-**Purpose:** Verify Node/runtime tools and (optionally) project readiness for strict checks
+### `cxgrd init-hooks`
+Sets up a pre-commit hook so CXGRD checks run automatically before every commit.
 
-**Syntax:**
 ```bash
-cxgrd doctor          # global toolchain only
-cxgrd doctor [path]   # + project language detection and .cg status
+cxgrd init-hooks
+cxgrd init-hooks --threshold 80 --block-critical
+cxgrd init-hooks --uninstall
 ```
 
-Exits with code 1 when the project cannot run `cxgrd check --strict` (missing Pyright on a Python repo, no scan, etc.).
+### `cxgrd watch`
+Runs in the background and monitors your project for dependency changes in real time.
 
-### cxgrd init-hooks
-**Purpose:** Initialize pre-commit hooks to catch errors before commiting to git
-
-**Syntax:**
-```bash
-cxgrd init-hooks                 # initialize hook
-cxgrd init-hooks --threshold 80 --block-critical    #initialize hook with threshold
-cxgrd init-hooks --uninstall     # uninstall hook
-```
-
-### cxgrd watch
-**Purpose:** Real time monitoring which works in background
-
-**Syntax:**
 ```bash
 cxgrd watch
 ```
 
-## Output Format
+---
 
-### graph.json Structure
-```json
-{
-  "files": {
-    "src/services/auth.ts": {
-      "path": "src/services/auth.ts",
-      "language": "typescript",
-      "dependencies": [
-        {
-          "from": "src/services/auth.ts",
-          "to": "./utils/crypto.ts",
-          "type": "import",
-          "line": 3
-        }
-      ],
-      "symbols": ["authenticate", "AuthService", "validateToken"]
-    }
-  },
-  "stats": {
-    "totalFiles": 42,
-    "totalDependencies": 156,
-    "languages": {
-      "typescript": 32,
-      "python": 10
-    }
-  }
-}
+## Typical Workflow
+
+```bash
+# 1. Authenticate
+cxgrd auth login
+
+# 2. Scan your project
+cxgrd scan .
+
+# 3. Before making a change — check the blast radius
+cxgrd input "extract UserService into a separate module"
+
+# 4. Generate an enriched prompt for your AI
+cxgrd prompt "extract UserService into a separate module"
+
+# 5. Paste the prompt into your AI tool, make the changes
+
+# 6. Validate the result
+cxgrd check .
 ```
+
+---
 
 ## Development
 
-### Installation
 ```bash
 npm install
 npm run build
-```
 
-### Basic Usage
-
-#### Scan a Project
-```bash
+# Run commands locally
 npm run dev -- scan /path/to/project
+npm run dev -- input "describe your change"
+npm run dev -- prompt "describe your feature"
 ```
-Analyzes the project and creates `.cg/` with dependency graph.
 
-#### Analyze Blast Radius
-```bash
-npm run dev -- input "describe your change here"
-```
-Shows which files will be affected by your proposed change.
+---
 
-#### Generate AI Prompt
-```bash
-npm run dev -- prompt "describe your feature here"
-```
-Creates an architecturally-aware prompt for your AI assistant.
-
-#### Validate Code
-```bash
-npm run dev -- check /path/to/project
-```
-Checks for circular dependencies, orphaned files, and architecture violations.
-
-## Architecture Overview
-
-1. **Scanner** - Recursively finds source files
-2. **Graph Builder** - Extracts dependencies and symbols
-3. **CG Directory** - Manages `.cg/` persistence
-4. **Commands** - User-facing CLI operations
-
+**Learn more at [cxgrd.com](https://cxgrd.com)**
