@@ -32,6 +32,7 @@ export async function inputCommand(description: string, projectPath?: string): P
         throw err;
       }
     }
+
     const cgDir = new CgDirectory(rootPath);
     const graph = await cgDir.readGraph();
 
@@ -40,15 +41,43 @@ export async function inputCommand(description: string, projectPath?: string): P
       process.exit(1);
     }
 
-    // Detect changed files from description and git
+    const allFiles = Object.keys(graph.files || {});
+
+    // Load symbols.json to match function/class/variable names
+    const symbols = await cgDir.readSymbols().catch(() => null);
+
+    // Build a map: symbolName → file path
+    const symbolToFile: Record<string, string> = {};
+    if (symbols) {
+      for (const [filePath, fileSymbols] of Object.entries(symbols as Record<string, string[]>)) {
+        for (const sym of fileSymbols) {
+          symbolToFile[sym.toLowerCase()] = filePath;
+        }
+      }
+    }
+
+    // Find files that define symbols mentioned in the description
+    const descriptionLower = description.toLowerCase();
+    const symbolMatches: string[] = [];
+    for (const [sym, filePath] of Object.entries(symbolToFile)) {
+      if (descriptionLower.includes(sym)) {
+        if (!symbolMatches.includes(filePath)) {
+          symbolMatches.push(filePath);
+          RichOutput.info(`Symbol match: "${sym}" → ${filePath}`);
+        }
+      }
+    }
+
+    // Also do the existing filename/description matching
     const changeDetector = new ChangeDetector(rootPath);
     const gitChanges = changeDetector.getChangedFiles();
-    const descriptionMatch = changeDetector.parseDescription(description, Object.keys(graph.files || {}));
+    const descriptionMatch = changeDetector.parseDescription(description, allFiles);
 
-    // Combine both sources of information
+    // Combine all sources
     const changedFiles = [
       ...gitChanges.files,
       ...descriptionMatch.files,
+      ...symbolMatches,
     ];
     const uniqueFiles = [...new Set(changedFiles)];
 
@@ -58,11 +87,10 @@ export async function inputCommand(description: string, projectPath?: string): P
       RichOutput.info(`Detected ${uniqueFiles.length} changed file(s)`);
     }
 
-    // Run enhanced blast radius analysis
+    // Run blast radius analysis
     const analyzer = new BlastRadiusAnalyzer(graph);
     const result = analyzer.analyze(uniqueFiles.length > 0 ? uniqueFiles : []);
 
-    // Display results
     displayBlastRadiusResults(result);
 
     // Save to history
@@ -92,6 +120,7 @@ export async function inputCommand(description: string, projectPath?: string): P
       await incrementAuditCount();
       await printAuditUsageStatus();
     }
+
     await recordAuditEventIfTeam(session, rootPath, {
       eventType: 'input',
       riskScore: result.totalRisk,
@@ -99,6 +128,7 @@ export async function inputCommand(description: string, projectPath?: string): P
       affectedCount: result.affectedFiles.length,
       summary: description.slice(0, 200),
     });
+
   } catch (err: any) {
     RichOutput.error(err.message);
     process.exit(1);
@@ -109,7 +139,6 @@ function displayBlastRadiusResults(result: any): void {
   RichOutput.blank();
   RichOutput.section('Impact Summary');
 
-  // Overall risk display
   const riskBadge = CLIFormatter.severity(result.riskLevel);
   console.log(`   Overall Risk: ${riskBadge}`);
   console.log(`   Risk Score: ${result.totalRisk}/100`);
@@ -124,7 +153,6 @@ function displayBlastRadiusResults(result: any): void {
   if (result.affectedFiles.length > 0) {
     RichOutput.blank();
     console.log('   Top affected files:\n');
-
     const displayFiles = result.affectedFiles.slice(0, 15);
     for (const file of displayFiles) {
       const severity = CLIFormatter.severity(file.severity);
@@ -132,14 +160,12 @@ function displayBlastRadiusResults(result: any): void {
       console.log(`   ${severity} ${file.path}`);
       console.log(`      └─ ${file.reason} ${distanceLabel}`);
     }
-
     if (result.affectedFiles.length > 15) {
       RichOutput.blank();
       console.log(`   ... and ${result.affectedFiles.length - 15} more files`);
     }
   }
 
-  // Change types
   if (result.changeTypes.length > 0) {
     RichOutput.blank();
     RichOutput.section('Change Classification');
@@ -149,7 +175,6 @@ function displayBlastRadiusResults(result: any): void {
     }
   }
 
-  // Recommendations
   if (result.recommendations.length > 0) {
     RichOutput.blank();
     RichOutput.section('Recommendations');
