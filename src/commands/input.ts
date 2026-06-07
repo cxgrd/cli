@@ -42,25 +42,27 @@ export async function inputCommand(description: string, projectPath?: string): P
     }
 
     const allFiles = Object.keys(graph.files || {});
+    const symbols = await cgDir.readSymbols().catch(() => ({}));
 
-    // Load symbols.json to match function/class/variable names
-    const symbols = await cgDir.readSymbols().catch(() => null);
-
-    // Build a map: symbolName → file path
+    // Build symbol → file map (lowercase keys for matching)
     const symbolToFile: Record<string, string> = {};
-    if (symbols) {
-      for (const [filePath, fileSymbols] of Object.entries(symbols as Record<string, string[]>)) {
-        for (const sym of fileSymbols) {
-          symbolToFile[sym.toLowerCase()] = filePath;
-        }
+    for (const [filePath, fileSymbols] of Object.entries(symbols as Record<string, string[]>)) {
+      for (const sym of fileSymbols) {
+        symbolToFile[sym.toLowerCase()] = filePath;
       }
     }
 
-    // Find files that define symbols mentioned in the description
-    const descriptionLower = description.toLowerCase();
+    // Tokenize description into whole identifiers using regex
+    // "renaming _set_session_cookie to set_cookie"
+    // → ["renaming", "_set_session_cookie", "to", "set_cookie"]
+    const descriptionTokens = new Set(
+      description.toLowerCase().match(/[a-z_][a-z0-9_]*/g) || []
+    );
+
+    // Match only exact symbol tokens — no substring matching
     const symbolMatches: string[] = [];
     for (const [sym, filePath] of Object.entries(symbolToFile)) {
-      if (descriptionLower.includes(sym)) {
+      if (descriptionTokens.has(sym)) {
         if (!symbolMatches.includes(filePath)) {
           symbolMatches.push(filePath);
           RichOutput.info(`Symbol match: "${sym}" → ${filePath}`);
@@ -68,18 +70,17 @@ export async function inputCommand(description: string, projectPath?: string): P
       }
     }
 
-    // Also do the existing filename/description matching
+    // Filename/path matching from description
     const changeDetector = new ChangeDetector(rootPath);
     const gitChanges = changeDetector.getChangedFiles();
     const descriptionMatch = changeDetector.parseDescription(description, allFiles);
 
     // Combine all sources
-    const changedFiles = [
+    const uniqueFiles = [...new Set([
       ...gitChanges.files,
       ...descriptionMatch.files,
       ...symbolMatches,
-    ];
-    const uniqueFiles = [...new Set(changedFiles)];
+    ])];
 
     if (uniqueFiles.length === 0) {
       RichOutput.warning('Could not identify changed files. Using heuristics based on description.');
@@ -87,13 +88,11 @@ export async function inputCommand(description: string, projectPath?: string): P
       RichOutput.info(`Detected ${uniqueFiles.length} changed file(s)`);
     }
 
-    // Run blast radius analysis
     const analyzer = new BlastRadiusAnalyzer(graph);
     const result = analyzer.analyze(uniqueFiles.length > 0 ? uniqueFiles : []);
 
     displayBlastRadiusResults(result);
 
-    // Save to history
     const history = await cgDir.readHistory();
     history.push({
       timestamp: Date.now(),
