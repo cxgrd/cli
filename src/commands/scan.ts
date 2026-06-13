@@ -42,7 +42,7 @@ export async function scanCommand(
       }
       if (session.plan !== 'team') {
         console.error(
-          chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/upgrade'),
+          chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/pricing'),
         );
         process.exit(1);
       }
