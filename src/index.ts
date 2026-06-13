@@ -29,12 +29,17 @@ async function main() {
               type: 'string',
             })
             .option('sync', {
-              describe: 'Push graph to org cloud after scan (Team+)',
+              describe: 'Push graph to cloud after scan',
+              type: 'boolean',
+              default: false,
+            })
+            .option('team', {
+              describe: 'Require team session and push to shared team graph (Team plan)',
               type: 'boolean',
               default: false,
             }),
         async (argv: any) => {
-          await scanCommand(argv.path as string, { sync: argv.sync });
+          await scanCommand(argv.path as string, { sync: argv.sync, team: argv.team });
         },
       )
       .command(
@@ -57,7 +62,7 @@ async function main() {
       )
       .command(
         'prompt <description>',
-        'Generate LLM-enriched AI prompt (Pro / Team / Enterprise)',
+        'Generate LLM-enriched AI prompt (Pro / Team)',
         (y: any) =>
           y
             .positional('description', {
@@ -188,7 +193,6 @@ async function main() {
           });
         },
       )
-      
       .command(
         'watch [path]',
         'Monitor project for real-time architecture analysis',

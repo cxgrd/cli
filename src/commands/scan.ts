@@ -18,6 +18,8 @@ import {
 
 export interface ScanCommandOptions {
   sync?: boolean;
+  // --team: require team session + push to shared graph after scan
+  team?: boolean;
 }
 
 export async function scanCommand(
@@ -30,8 +32,30 @@ export async function scanCommand(
   console.log(chalk.gray(`   Path: ${rootPath}`));
 
   try {
-    // Check free tier audit limit before running
     const session = await resolveActiveSession();
+
+    // ── Team flag validation ──────────────────────────────────────────────────
+    if (options.team) {
+      if (!session) {
+        console.error(chalk.red('\n✗ Not authenticated. Run: cxgrd auth login'));
+        process.exit(1);
+      }
+      if (session.plan !== 'team') {
+        console.error(
+          chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/upgrade'),
+        );
+        process.exit(1);
+      }
+      if (!session.orgId) {
+        console.error(
+          chalk.red('\n✗ No team associated with your account. Ask your team owner to invite you.'),
+        );
+        process.exit(1);
+      }
+      console.log(chalk.gray(`   Team: ${session.orgName ?? session.orgId} (${session.role})`));
+    }
+
+    // ── Free tier audit limit ─────────────────────────────────────────────────
     if (!session || session.plan === 'free') {
       try {
         await checkFreeAuditLimit();
@@ -125,15 +149,28 @@ export async function scanCommand(
       await printAuditUsageStatus();
     }
 
-    // Auto-sync if user has cloud_sync feature and opts in
+    // ── Sync logic ────────────────────────────────────────────────────────────
+    // --team always syncs. --sync or cloud_sync feature syncs for pro/team.
     const shouldSync =
-      options.sync || (session && planIncludesFeature(session.plan, 'cloud_sync'));
+      options.team ||
+      options.sync ||
+      (session && planIncludesFeature(session.plan, 'cloud_sync'));
+
     if (shouldSync && session) {
       try {
         await syncPush(cgDir, rootPath, session);
-        console.log(chalk.green('✓ Synced graph to cloud'));
+        if (options.team) {
+          console.log(chalk.green(`✓ Shared graph updated (team: ${session.orgName ?? session.orgId})`));
+        } else {
+          console.log(chalk.green('✓ Synced graph to cloud'));
+        }
       } catch (syncErr: unknown) {
         const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
+        // --team makes sync errors fatal so the dev knows the shared graph wasn't updated
+        if (options.team) {
+          console.error(chalk.red(`✗ Team sync failed: ${msg}`));
+          process.exit(1);
+        }
         console.log(chalk.yellow(`   Sync skipped: ${msg}`));
       }
     }
