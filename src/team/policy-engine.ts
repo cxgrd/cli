@@ -6,7 +6,7 @@ export function evaluateOrgPolicy(
   role: OrgRole,
   policy: OrgPolicyDocument,
 ): PolicyEvaluation {
-  const rolePolicy = policy.roles[role] || policy.roles.member;
+  const rolePolicy = policy.roles[role] || policy.roles.dev;
   const mergeThreshold = policy.merge.blockIfBlastRadiusAbove;
   const roleThreshold = rolePolicy.maxBlastRadius;
   const effectiveThreshold = Math.min(mergeThreshold, roleThreshold);

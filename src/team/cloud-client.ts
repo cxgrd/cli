@@ -17,7 +17,7 @@ function authHeaders(token: string): Record<string, string> {
   return {
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
+    'x-cxgrd-token': token,
   };
 }
 
@@ -36,24 +36,26 @@ function useDevStore(session: ActiveSession): boolean {
   return isDevCloudEnabled() || session.source === 'dev_override';
 }
 
+// POST /api/teams/:teamId/graph/sync
 export async function pushGraph(session: ActiveSession, bundle: GraphBundle): Promise<void> {
-  const orgId = session.orgId;
-  if (!orgId) {
-    throw new Error('No organization on this account. Team features require an org.');
+  const teamId = session.orgId;
+  if (!teamId) {
+    throw new Error('No team on this account. Team features require a team plan.');
   }
 
   if (useDevStore(session)) {
-    await devPutGraph(orgId, bundle);
+    await devPutGraph(teamId, bundle);
     return;
   }
 
-  const res = await apiFetch(`/api/orgs/${orgId}/graphs`, session.token, {
-    method: 'PUT',
+  const res = await apiFetch(`/api/teams/${teamId}/graph/sync`, session.token, {
+    method: 'POST',
     body: JSON.stringify(bundle),
   });
 
   if (res.status === 404 || res.status === 501) {
-    await devPutGraph(orgId, bundle);
+    // Fall back to dev store during local development
+    await devPutGraph(teamId, bundle);
     return;
   }
 
@@ -63,32 +65,34 @@ export async function pushGraph(session: ActiveSession, bundle: GraphBundle): Pr
   }
 }
 
+// GET /api/teams/:teamId/graph/sync?repoId=...&sha=...
 export async function pullGraph(
   session: ActiveSession,
   repoId: string,
   gitRef: string,
 ): Promise<GraphBundle | null> {
-  const orgId = session.orgId;
-  if (!orgId) {
-    throw new Error('No organization on this account.');
+  const teamId = session.orgId;
+  if (!teamId) {
+    throw new Error('No team on this account.');
   }
 
   if (useDevStore(session)) {
-    return devGetGraph(orgId, repoId, gitRef);
+    return devGetGraph(teamId, repoId, gitRef);
   }
 
   const res = await apiFetch(
-    `/api/orgs/${orgId}/graphs?repoId=${encodeURIComponent(repoId)}&ref=${encodeURIComponent(gitRef)}`,
+    `/api/teams/${teamId}/graph/sync?repoId=${encodeURIComponent(repoId)}&sha=${encodeURIComponent(gitRef)}`,
     session.token,
     { method: 'GET' },
   );
 
   if (res.status === 404) {
-    return devGetGraph(orgId, repoId, gitRef);
+    // No snapshot yet for this SHA — fall back to dev store
+    return devGetGraph(teamId, repoId, gitRef);
   }
 
   if (res.status === 501) {
-    return devGetGraph(orgId, repoId, gitRef);
+    return devGetGraph(teamId, repoId, gitRef);
   }
 
   if (!res.ok) {
@@ -96,24 +100,26 @@ export async function pullGraph(
     throw new Error(`Graph pull failed (${res.status}): ${body || res.statusText}`);
   }
 
-  return (await res.json()) as GraphBundle;
+  const data = await res.json() as { snapshot: GraphBundle };
+  return data.snapshot ?? null;
 }
 
 export async function fetchOrgPolicy(session: ActiveSession): Promise<OrgPolicyDocument> {
-  const orgId = session.orgId;
-  if (!orgId) {
-    throw new Error('No organization on this account.');
+  const teamId = session.orgId;
+  if (!teamId) {
+    throw new Error('No team on this account.');
   }
 
   if (useDevStore(session)) {
-    const policy = await devGetPolicy(orgId);
+    const policy = await devGetPolicy(teamId);
     return policy!;
   }
 
-  const res = await apiFetch(`/api/orgs/${orgId}/policies`, session.token, { method: 'GET' });
+  // Policies endpoint will be wired in phase 2 — fall back to dev store for now
+  const res = await apiFetch(`/api/teams/${teamId}/policies`, session.token, { method: 'GET' });
 
   if (res.status === 404 || res.status === 501) {
-    const policy = await devGetPolicy(orgId);
+    const policy = await devGetPolicy(teamId);
     return policy!;
   }
 
@@ -129,26 +135,21 @@ export async function postAuditEvent(
   session: ActiveSession,
   payload: AuditEventPayload,
 ): Promise<void> {
-  const orgId = session.orgId;
-  if (!orgId) return;
+  const teamId = session.orgId;
+  if (!teamId) return;
 
   if (useDevStore(session)) {
-    await devAppendEvent(orgId, payload);
+    await devAppendEvent(teamId, payload);
     return;
   }
 
-  const res = await apiFetch(`/api/orgs/${orgId}/events`, session.token, {
+  // Audit events endpoint will be wired in phase 2 — non-fatal for now
+  const res = await apiFetch(`/api/teams/${teamId}/events`, session.token, {
     method: 'POST',
     body: JSON.stringify(payload),
-  });
+  }).catch(() => null);
 
-  if (res.status === 404 || res.status === 501) {
-    await devAppendEvent(orgId, payload);
-    return;
-  }
-
-  if (!res.ok) {
-    // Non-fatal for CLI UX
-    return;
+  if (!res || res.status === 404 || res.status === 501) {
+    await devAppendEvent(teamId, payload);
   }
 }

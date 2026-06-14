@@ -5,9 +5,9 @@ import { normalizePlan, type SubscriptionPlan } from './plans';
 import type { OrgRole } from '../team/types';
 
 function normalizeRole(role: string | undefined): OrgRole {
-  const r = (role || 'member').toLowerCase();
-  if (r === 'lead' || r === 'admin') return r;
-  return 'member';
+  const r = (role || 'dev').toLowerCase();
+  if (r === 'owner' || r === 'admin') return r;
+  return 'dev';
 }
 
 const POLL_INTERVAL_MS = 2000;
@@ -34,7 +34,7 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
         source: 'dev_override',
         orgId: envString('CXGRD_DEV_ORG_ID', 'org_dev'),
         orgName: envString('CXGRD_DEV_ORG_NAME', 'Dev Org'),
-        role: normalizeRole(envString('CXGRD_DEV_ROLE', 'member')),
+        role: normalizeRole(envString('CXGRD_DEV_ROLE', 'dev')),
       };
     }
   }

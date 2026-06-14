@@ -57,7 +57,7 @@ export async function authLoginCommand(): Promise<void> {
     console.log(chalk.gray(`   Token saved to ${getAuthPath()}`));
     console.log(chalk.gray(`   Plan: ${auth.plan}`));
     if (auth.orgId) {
-      console.log(chalk.gray(`   Org: ${auth.orgName || auth.orgId} · role: ${auth.role || 'member'}`));
+      console.log(chalk.gray(`   Org: ${auth.orgName || auth.orgId} · role: ${auth.role || 'dev'}`));
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);

@@ -1,4 +1,4 @@
-export type OrgRole = 'member' | 'lead' | 'admin';
+export type OrgRole = 'owner' | 'admin' | 'dev';
 
 export interface GraphBundle {
   version: 1;

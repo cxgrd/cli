@@ -8,26 +8,26 @@ const policy: OrgPolicyDocument = {
   orgId: 'org_test',
   defaultMaxBlastRadius: 100,
   roles: {
-    member: { maxBlastRadius: 85, blockOnRiskLevels: ['critical'] },
-    lead: { maxBlastRadius: 70, blockOnRiskLevels: ['critical', 'high'] },
+    dev: { maxBlastRadius: 50, blockOnRiskLevels: ['critical', 'high'] },
+    owner: { maxBlastRadius: 100, blockOnRiskLevels:[] },
     admin: { maxBlastRadius: 100, blockOnRiskLevels: [] },
   },
   merge: { blockIfBlastRadiusAbove: 80, requireCheckPass: false },
 };
 
 describe('evaluateOrgPolicy', () => {
-  it('blocks member when score exceeds merge threshold', () => {
-    const r = evaluateOrgPolicy(90, 'medium', 'member', policy);
+  it('blocks dev when score exceeds merge threshold', () => {
+    const r = evaluateOrgPolicy(90, 'medium', 'dev', policy);
     assert.equal(r.allowed, false);
   });
 
-  it('allows member below threshold', () => {
-    const r = evaluateOrgPolicy(50, 'low', 'member', policy);
+  it('allows dev below threshold', () => {
+    const r = evaluateOrgPolicy(50, 'low', 'dev', policy);
     assert.equal(r.allowed, true);
   });
 
-  it('blocks lead on high risk level', () => {
-    const r = evaluateOrgPolicy(40, 'high', 'lead', policy);
+  it('blocks owner on high risk level', () => {
+    const r = evaluateOrgPolicy(40, 'high', 'owner', policy);
     assert.equal(r.allowed, false);
   });
 });

@@ -68,9 +68,9 @@ function defaultDevPolicy(orgId: string): OrgPolicyDocument {
     orgId,
     defaultMaxBlastRadius: 100,
     roles: {
-      member: { maxBlastRadius: 85, blockOnRiskLevels: ['critical'] },
-      lead: { maxBlastRadius: 70, blockOnRiskLevels: ['critical', 'high'] },
+      owner: { maxBlastRadius: 100, blockOnRiskLevels: [] },
       admin: { maxBlastRadius: 100, blockOnRiskLevels: [] },
+      dev:   { maxBlastRadius: 50,  blockOnRiskLevels: ['critical', 'high'] },
     },
     merge: {
       blockIfBlastRadiusAbove: 80,

@@ -8,3 +8,4 @@ dist/
 .idea/
 *.swp
 *.swo
+*.cg
