@@ -15,10 +15,11 @@ import {
   printAuditUsageStatus,
   AuditUsageExceededError,
 } from '../auth/audit-usage';
+import { postAuditEvent, postHealthSnapshot } from '../team/cloud-client';
+import type { ActiveSession } from '../auth/auth-session';
 
 export interface ScanCommandOptions {
   sync?: boolean;
-  // --team: require team session + push to shared graph after scan
   team?: boolean;
 }
 
@@ -41,15 +42,11 @@ export async function scanCommand(
         process.exit(1);
       }
       if (session.plan !== 'team') {
-        console.error(
-          chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/pricing'),
-        );
+        console.error(chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/pricing'));
         process.exit(1);
       }
       if (!session.orgId) {
-        console.error(
-          chalk.red('\n✗ No team associated with your account. Ask your team owner to invite you.'),
-        );
+        console.error(chalk.red('\n✗ No team associated with your account. Ask your team owner to invite you.'));
         process.exit(1);
       }
       console.log(chalk.gray(`   Team: ${session.orgName ?? session.orgId} (${session.role})`));
@@ -74,18 +71,13 @@ export async function scanCommand(
 
     const scanner = new FileScanner();
     const files = await scanner.scanDirectory(rootPath);
-
     console.log(chalk.green(`✓ Found ${files.length} source files`));
 
     const builder = new DependencyGraphBuilder();
     const graph = builder.buildGraph(files);
 
     console.log(chalk.blue('📊 Building dependency graph...'));
-    console.log(
-      chalk.gray(
-        `   Total dependencies: ${graph.stats.totalDependencies}`,
-      ),
-    );
+    console.log(chalk.gray(`   Total dependencies: ${graph.stats.totalDependencies}`));
     console.log(
       chalk.gray(
         `   Languages: ${Object.entries(graph.stats.languages)
@@ -122,15 +114,9 @@ export async function scanCommand(
 
     if (graphDiff.filesAdded.length || graphDiff.filesRemoved.length || graphDiff.dependencyChanges) {
       console.log(chalk.gray('   Graph diff:'));
-      if (graphDiff.filesAdded.length) {
-        console.log(chalk.gray(`     + ${graphDiff.filesAdded.length} new file(s)`));
-      }
-      if (graphDiff.filesRemoved.length) {
-        console.log(chalk.gray(`     - ${graphDiff.filesRemoved.length} removed file(s)`));
-      }
-      if (graphDiff.dependencyChanges) {
-        console.log(chalk.gray(`     ~ ${graphDiff.dependencyChanges} dependency change(s)`));
-      }
+      if (graphDiff.filesAdded.length) console.log(chalk.gray(`     + ${graphDiff.filesAdded.length} new file(s)`));
+      if (graphDiff.filesRemoved.length) console.log(chalk.gray(`     - ${graphDiff.filesRemoved.length} removed file(s)`));
+      if (graphDiff.dependencyChanges) console.log(chalk.gray(`     ~ ${graphDiff.dependencyChanges} dependency change(s)`));
       console.log(chalk.gray(`     Patterns updated (${patterns.importHubs.length} hubs)`));
     }
 
@@ -143,14 +129,12 @@ export async function scanCommand(
     console.log(chalk.green('✓ Scan complete!'));
     console.log(chalk.green('✓ Updated .cg/ (graph, symbols, arch, patterns, memory)'));
 
-    // Increment audit count after successful scan (for free tier tracking)
     if (!session || session.plan === 'free') {
       await incrementAuditCount();
       await printAuditUsageStatus();
     }
 
-    // ── Sync logic ────────────────────────────────────────────────────────────
-    // --team always syncs. --sync or cloud_sync feature syncs for pro/team.
+    // ── Sync + team telemetry ─────────────────────────────────────────────────
     const shouldSync =
       options.team ||
       options.sync ||
@@ -166,13 +150,41 @@ export async function scanCommand(
         }
       } catch (syncErr: unknown) {
         const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
-        // --team makes sync errors fatal so the dev knows the shared graph wasn't updated
         if (options.team) {
           console.error(chalk.red(`✗ Team sync failed: ${msg}`));
           process.exit(1);
         }
         console.log(chalk.yellow(`   Sync skipped: ${msg}`));
       }
+    }
+
+    // ── Post health snapshot + audit event (team only, fire-and-forget) ───────
+    if (options.team && session?.orgId) {
+      const repoId = meta.projectPath.split(/[/\\]/).pop() ?? 'unknown';
+      const commitSha = await resolveGitSha(rootPath);
+      const healthMetrics = computeHealthMetrics(graph, patterns);
+
+      // Non-fatal — don't block the CLI on telemetry
+      postHealthSnapshot(session, {
+        repoId,
+        commitSha,
+        fileCount: files.length,
+        depCount: graph.stats.totalDependencies,
+        ...healthMetrics,
+      }).catch(() => {});
+
+      postAuditEvent(session, {
+        eventType: 'scan',
+        repoId,
+        gitRef: commitSha,
+        summary: `Scanned ${files.length} files, ${graph.stats.totalDependencies} deps`,
+        metadata: {
+          filesAdded: graphDiff.filesAdded.length,
+          filesRemoved: graphDiff.filesRemoved.length,
+          dependencyChanges: graphDiff.dependencyChanges,
+          languages: Object.keys(graph.stats.languages),
+        },
+      }).catch(() => {});
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
@@ -181,68 +193,84 @@ export async function scanCommand(
   }
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+async function resolveGitSha(rootPath: string): Promise<string> {
+  try {
+    const { execSync } = await import('child_process');
+    return execSync('git rev-parse --short HEAD', { cwd: rootPath, stdio: 'pipe' })
+      .toString()
+      .trim();
+  } catch {
+    // Not a git repo or git not installed — use timestamp as fallback
+    return `local-${Date.now()}`;
+  }
+}
+
+function computeHealthMetrics(
+  graph: { files?: Record<string, unknown>; stats: { totalDependencies: number } },
+  patterns: CgPatternsFile,
+): {
+  avgBlastRadius: number;
+  maxBlastRadius: number;
+  couplingScore: number;
+  hubCount: number;
+  hotspots: string[];
+} {
+  const files = Object.keys(graph.files ?? {});
+  const fileCount = files.length;
+
+  // Coupling score: ratio of deps to files (0-1 range, clamped)
+  const couplingScore = fileCount > 0
+    ? Math.min(graph.stats.totalDependencies / fileCount / 10, 1)
+    : 0;
+
+  // Hub files are high-import files — use patterns.importHubs if available
+  const hubs: string[] = patterns.importHubs?.map((h) => h.target) ?? [];
+  const hubCount = hubs.length;
+
+  // Hotspots = top 5 hub files (most imported = highest blast radius potential)
+  const hotspots = hubs.slice(0, 5);
+
+  // Blast radius estimates: hubs get higher scores, others get low defaults
+  const hubSet = new Set(hubs);
+  const blastScores = files.map((f) => (hubSet.has(f) ? Math.min(fileCount * 0.4, 80) : Math.min(fileCount * 0.05, 20)));
+  const avgBlastRadius = blastScores.length > 0
+    ? Math.round(blastScores.reduce((a, b) => a + b, 0) / blastScores.length)
+    : 0;
+  const maxBlastRadius = blastScores.length > 0 ? Math.round(Math.max(...blastScores)) : 0;
+
+  return {
+    avgBlastRadius,
+    maxBlastRadius,
+    couplingScore: Math.round(couplingScore * 100) / 100,
+    hubCount,
+    hotspots,
+  };
+}
+
 function inferArchitecture(graph: { files?: Record<string, unknown> }): {
   layers: Record<string, string[]>;
   inferred: boolean;
   timestamp: number;
 } {
-  const layers: Record<string, string[]> = {
-    service: [],
-    model: [],
-    util: [],
-    component: [],
-    other: [],
-  };
-
+  const layers: Record<string, string[]> = { service: [], model: [], util: [], component: [], other: [] };
   for (const filePath of Object.keys(graph.files || {})) {
-    if (filePath.includes('service') || filePath.includes('controller')) {
-      layers.service.push(filePath);
-    } else if (filePath.includes('model') || filePath.includes('schema')) {
-      layers.model.push(filePath);
-    } else if (
-      filePath.includes('util') ||
-      filePath.includes('helper') ||
-      filePath.includes('constant')
-    ) {
-      layers.util.push(filePath);
-    } else if (filePath.includes('component')) {
-      layers.component.push(filePath);
-    } else {
-      layers.other.push(filePath);
-    }
+    if (filePath.includes('service') || filePath.includes('controller')) layers.service.push(filePath);
+    else if (filePath.includes('model') || filePath.includes('schema')) layers.model.push(filePath);
+    else if (filePath.includes('util') || filePath.includes('helper') || filePath.includes('constant')) layers.util.push(filePath);
+    else if (filePath.includes('component')) layers.component.push(filePath);
+    else layers.other.push(filePath);
   }
-
   return {
-    layers: Object.fromEntries(
-      Object.entries(layers).filter(([, files]) => files.length > 0),
-    ),
+    layers: Object.fromEntries(Object.entries(layers).filter(([, files]) => files.length > 0)),
     inferred: true,
     timestamp: Date.now(),
   };
 }
 
 function findEntryPoints(files: { path: string }[], _rootPath: string): string[] {
-  const entryPoints: string[] = [];
-  const commonEntries = [
-    'index.ts',
-    'index.js',
-    'main.ts',
-    'main.js',
-    'app.ts',
-    'app.js',
-    'index.tsx',
-    'app.tsx',
-  ];
-
-  for (const entry of commonEntries) {
-    if (files.some((f) => f.path === entry)) {
-      entryPoints.push(entry);
-    }
-  }
-
-  if (entryPoints.length === 0 && files.length > 0) {
-    entryPoints.push(files[0].path);
-  }
-
-  return entryPoints;
+  const entries = ['index.ts', 'index.js', 'main.ts', 'main.js', 'app.ts', 'app.js', 'index.tsx', 'app.tsx'];
+  const found = entries.filter((e) => files.some((f) => f.path === e));
+  return found.length > 0 ? found : files.length > 0 ? [files[0].path] : [];
 }

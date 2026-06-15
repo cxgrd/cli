@@ -21,11 +21,7 @@ function authHeaders(token: string): Record<string, string> {
   };
 }
 
-async function apiFetch(
-  path: string,
-  token: string,
-  init?: RequestInit,
-): Promise<Response> {
+async function apiFetch(path: string, token: string, init?: RequestInit): Promise<Response> {
   return fetch(`${apiBase()}${path}`, {
     ...init,
     headers: { ...authHeaders(token), ...init?.headers },
@@ -39,26 +35,16 @@ function useDevStore(session: ActiveSession): boolean {
 // POST /api/teams/:teamId/graph/sync
 export async function pushGraph(session: ActiveSession, bundle: GraphBundle): Promise<void> {
   const teamId = session.orgId;
-  if (!teamId) {
-    throw new Error('No team on this account. Team features require a team plan.');
-  }
+  if (!teamId) throw new Error('No team on this account. Team features require a team plan.');
 
-  if (useDevStore(session)) {
-    await devPutGraph(teamId, bundle);
-    return;
-  }
+  if (useDevStore(session)) { await devPutGraph(teamId, bundle); return; }
 
   const res = await apiFetch(`/api/teams/${teamId}/graph/sync`, session.token, {
     method: 'POST',
     body: JSON.stringify(bundle),
   });
 
-  if (res.status === 404 || res.status === 501) {
-    // Fall back to dev store during local development
-    await devPutGraph(teamId, bundle);
-    return;
-  }
-
+  if (res.status === 404 || res.status === 501) { await devPutGraph(teamId, bundle); return; }
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`Graph push failed (${res.status}): ${body || res.statusText}`);
@@ -72,13 +58,9 @@ export async function pullGraph(
   gitRef: string,
 ): Promise<GraphBundle | null> {
   const teamId = session.orgId;
-  if (!teamId) {
-    throw new Error('No team on this account.');
-  }
+  if (!teamId) throw new Error('No team on this account.');
 
-  if (useDevStore(session)) {
-    return devGetGraph(teamId, repoId, gitRef);
-  }
+  if (useDevStore(session)) return devGetGraph(teamId, repoId, gitRef);
 
   const res = await apiFetch(
     `/api/teams/${teamId}/graph/sync?repoId=${encodeURIComponent(repoId)}&sha=${encodeURIComponent(gitRef)}`,
@@ -86,15 +68,7 @@ export async function pullGraph(
     { method: 'GET' },
   );
 
-  if (res.status === 404) {
-    // No snapshot yet for this SHA — fall back to dev store
-    return devGetGraph(teamId, repoId, gitRef);
-  }
-
-  if (res.status === 501) {
-    return devGetGraph(teamId, repoId, gitRef);
-  }
-
+  if (res.status === 404 || res.status === 501) return devGetGraph(teamId, repoId, gitRef);
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`Graph pull failed (${res.status}): ${body || res.statusText}`);
@@ -104,33 +78,7 @@ export async function pullGraph(
   return data.snapshot ?? null;
 }
 
-export async function fetchOrgPolicy(session: ActiveSession): Promise<OrgPolicyDocument> {
-  const teamId = session.orgId;
-  if (!teamId) {
-    throw new Error('No team on this account.');
-  }
-
-  if (useDevStore(session)) {
-    const policy = await devGetPolicy(teamId);
-    return policy!;
-  }
-
-  // Policies endpoint will be wired in phase 2 — fall back to dev store for now
-  const res = await apiFetch(`/api/teams/${teamId}/policies`, session.token, { method: 'GET' });
-
-  if (res.status === 404 || res.status === 501) {
-    const policy = await devGetPolicy(teamId);
-    return policy!;
-  }
-
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`Policy fetch failed (${res.status}): ${body || res.statusText}`);
-  }
-
-  return (await res.json()) as OrgPolicyDocument;
-}
-
+// POST /api/teams/:teamId/audit
 export async function postAuditEvent(
   session: ActiveSession,
   payload: AuditEventPayload,
@@ -138,13 +86,9 @@ export async function postAuditEvent(
   const teamId = session.orgId;
   if (!teamId) return;
 
-  if (useDevStore(session)) {
-    await devAppendEvent(teamId, payload);
-    return;
-  }
+  if (useDevStore(session)) { await devAppendEvent(teamId, payload); return; }
 
-  // Audit events endpoint will be wired in phase 2 — non-fatal for now
-  const res = await apiFetch(`/api/teams/${teamId}/events`, session.token, {
+  const res = await apiFetch(`/api/teams/${teamId}/audit`, session.token, {
     method: 'POST',
     body: JSON.stringify(payload),
   }).catch(() => null);
@@ -152,4 +96,53 @@ export async function postAuditEvent(
   if (!res || res.status === 404 || res.status === 501) {
     await devAppendEvent(teamId, payload);
   }
+}
+
+// POST /api/teams/:teamId/health
+export async function postHealthSnapshot(
+  session: ActiveSession,
+  payload: {
+    repoId: string;
+    commitSha: string;
+    fileCount: number;
+    depCount: number;
+    avgBlastRadius: number;
+    maxBlastRadius: number;
+    couplingScore: number;
+    hubCount: number;
+    hotspots: string[];
+  },
+): Promise<void> {
+  const teamId = session.orgId;
+  if (!teamId) return;
+
+  if (useDevStore(session)) return; // no dev-store equivalent needed for health
+
+  const res = await apiFetch(`/api/teams/${teamId}/health`, session.token, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  }).catch(() => null);
+
+  // Non-fatal — health snapshots are best-effort telemetry
+  if (res && !res.ok && res.status !== 404 && res.status !== 501) {
+    const body = await res.text().catch(() => '');
+    console.debug(`Health snapshot skipped (${res.status}): ${body}`);
+  }
+}
+
+export async function fetchOrgPolicy(session: ActiveSession): Promise<OrgPolicyDocument> {
+  const teamId = session.orgId;
+  if (!teamId) throw new Error('No team on this account.');
+
+  if (useDevStore(session)) return (await devGetPolicy(teamId))!;
+
+  const res = await apiFetch(`/api/teams/${teamId}/policies`, session.token, { method: 'GET' });
+
+  if (res.status === 404 || res.status === 501) return (await devGetPolicy(teamId))!;
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`Policy fetch failed (${res.status}): ${body || res.statusText}`);
+  }
+
+  return (await res.json()) as OrgPolicyDocument;
 }
