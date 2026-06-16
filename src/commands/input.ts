@@ -52,9 +52,7 @@ export async function inputCommand(description: string, projectPath?: string): P
       }
     }
 
-    // Tokenize description into whole identifiers using regex
-    // "renaming _set_session_cookie to set_cookie"
-    // → ["renaming", "_set_session_cookie", "to", "set_cookie"]
+    // Tokenize description into whole identifiers
     const descriptionTokens = new Set(
       description.toLowerCase().match(/[a-z_][a-z0-9_]*/g) || []
     );
@@ -89,7 +87,8 @@ export async function inputCommand(description: string, projectPath?: string): P
     }
 
     const analyzer = new BlastRadiusAnalyzer(graph);
-    const result = analyzer.analyze(uniqueFiles.length > 0 ? uniqueFiles : []);
+    // Pass description so classifyChanges can use intent keywords (refactor, rename, etc.)
+    const result = analyzer.analyze(uniqueFiles.length > 0 ? uniqueFiles : [], description);
 
     displayBlastRadiusResults(result);
 
