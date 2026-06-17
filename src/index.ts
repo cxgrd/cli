@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import yargs, { ArgumentsCamelCase } from 'yargs';
+import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import chalk from 'chalk';
 import { scanCommand } from './commands/scan';
@@ -12,10 +12,11 @@ import { watchCommand } from './commands/watch';
 import { doctorCommand } from './commands/doctor';
 import { authLoginCommand, authLogoutCommand, authStatusCommand } from './commands/auth';
 import { loadCxgrdEnv } from './config/env';
-
+import { printFirstRunNotice, trackEvent, optOut, optIn, isOptedOut } from './telemetry';
 
 async function main() {
   await loadCxgrdEnv();
+  printFirstRunNotice();
 
   try {
     await yargs(hideBin(process.argv))
@@ -24,21 +25,11 @@ async function main() {
         'Scan project and build dependency graph',
         (y: any) =>
           y
-            .positional('path', {
-              describe: 'Project path (default: current directory)',
-              type: 'string',
-            })
-            .option('sync', {
-              describe: 'Push graph to cloud after scan',
-              type: 'boolean',
-              default: false,
-            })
-            .option('team', {
-              describe: 'Require team session and push to shared team graph (Team plan)',
-              type: 'boolean',
-              default: false,
-            }),
+            .positional('path', { describe: 'Project path (default: current directory)', type: 'string' })
+            .option('sync', { describe: 'Push graph to cloud after scan', type: 'boolean', default: false })
+            .option('team', { describe: 'Require team session and push to shared team graph (Team plan)', type: 'boolean', default: false }),
         async (argv: any) => {
+          trackEvent('cli_scan', { team: !!argv.team, sync: !!argv.sync });
           await scanCommand(argv.path as string, { sync: argv.sync, team: argv.team });
         },
       )
@@ -47,16 +38,10 @@ async function main() {
         'Analyze blast radius of a change',
         (y: any) =>
           y
-            .positional('description', {
-              describe: 'Description of the change',
-              type: 'string',
-            })
-            .option('path', {
-              describe: 'Project path (default: current directory)',
-              type: 'string',
-              alias: 'p',
-            }),
+            .positional('description', { describe: 'Description of the change', type: 'string' })
+            .option('path', { describe: 'Project path (default: current directory)', type: 'string', alias: 'p' }),
         async (argv: any) => {
+          trackEvent('cli_input');
           await inputCommand(argv.description as string, argv.path as string);
         },
       )
@@ -65,16 +50,10 @@ async function main() {
         'Generate LLM-enriched AI prompt (Pro / Team)',
         (y: any) =>
           y
-            .positional('description', {
-              describe: 'Description of the change',
-              type: 'string',
-            })
-            .option('path', {
-              describe: 'Project path (default: current directory)',
-              type: 'string',
-              alias: 'p',
-            }),
+            .positional('description', { describe: 'Description of the change', type: 'string' })
+            .option('path', { describe: 'Project path (default: current directory)', type: 'string', alias: 'p' }),
         async (argv: any) => {
+          trackEvent('cli_prompt');
           await promptCommand(argv.description as string, argv.path as string);
         },
       )
@@ -83,113 +62,80 @@ async function main() {
         'Validate architecture and run compiler-backed verification',
         (y: any) =>
           y
-            .positional('path', {
-              describe: 'Project path (default: current directory)',
-              type: 'string',
-            })
-            .option('staged', {
-              describe: 'Only check git staged files (for pre-commit hooks)',
-              type: 'boolean',
-              default: false,
-            })
-            .option('changed', {
-              describe: 'Only check staged and unstaged changed files',
-              type: 'boolean',
-              default: false,
-            })
-            .option('skip-compiler', {
-              describe: 'Skip compiler-backed verification (structural only)',
-              type: 'boolean',
-              default: false,
-            })
-            .option('skip-structural', {
-              describe: 'Skip structural graph checks (compiler only)',
-              type: 'boolean',
-              default: false,
-            })
-            .option('strict', {
-              describe:
-                'Fail if a detected language compiler was skipped (e.g. Pyright missing on a Python project)',
-              type: 'boolean',
-              default: false,
-            }),
+            .positional('path', { describe: 'Project path (default: current directory)', type: 'string' })
+            .option('staged',         { describe: 'Only check git staged files', type: 'boolean', default: false })
+            .option('changed',        { describe: 'Only check staged and unstaged changed files', type: 'boolean', default: false })
+            .option('skip-compiler',  { describe: 'Skip compiler-backed verification', type: 'boolean', default: false })
+            .option('skip-structural',{ describe: 'Skip structural graph checks', type: 'boolean', default: false })
+            .option('strict',         { describe: 'Fail if a detected language compiler was skipped', type: 'boolean', default: false })
+            .option('ci',             { describe: 'CI mode: post result to server for GitHub PR status (Team plan)', type: 'boolean', default: false }),
         async (argv: any) => {
           const scope = argv.staged ? 'staged' : argv.changed ? 'changed' : 'all';
+          trackEvent('cli_check', { scope, strict: !!argv.strict, ci: !!argv.ci });
           await checkCommand(argv.path as string, {
             scope,
-            skipCompiler: argv.skipCompiler,
-            skipStructural: argv.skipStructural,
-            strict: argv.strict,
+            skipCompiler:    argv.skipCompiler,
+            skipStructural:  argv.skipStructural,
+            strict:          argv.strict,
+            ci:              argv.ci,
           });
         },
       )
       .command('auth', 'Sign in for Pro features (prompt, repo memory)', (y: any) =>
         y
-          .command('login', 'Open browser to sign in with GitHub', {}, async () => {
-            await authLoginCommand();
-          })
-          .command('logout', 'Remove stored credentials', {}, async () => {
-            await authLogoutCommand();
-          })
-          .command('status', 'Show current plan and auth state', {}, async () => {
-            await authStatusCommand();
-          })
+          .command('login',  'Open browser to sign in with GitHub', {}, async () => { trackEvent('cli_auth_login');  await authLoginCommand(); })
+          .command('logout', 'Remove stored credentials',           {}, async () => { trackEvent('cli_auth_logout'); await authLogoutCommand(); })
+          .command('status', 'Show current plan and auth state',    {}, async () => { await authStatusCommand(); })
           .demandCommand(1, 'Specify auth login, logout, or status')
           .help(),
       )
       .command(
-        'doctor [path]',
-        'Check runtime, compiler tools, and project readiness for cxgrd check --strict',
+        'config',
+        'Manage cxgrd settings',
         (y: any) =>
-          y.positional('path', {
-            describe: 'Project path (optional; omit for global toolchain only)',
-            type: 'string',
-          }),
-        async (argv: any) => {
-          await doctorCommand(argv.path as string);
+          y
+            .option('no-telemetry', { describe: 'Opt out of anonymous usage stats', type: 'boolean' })
+            .option('telemetry',    { describe: 'Re-enable anonymous usage stats',   type: 'boolean' }),
+        (argv: any) => {
+          if (argv.noTelemetry) {
+            optOut();
+            console.log(chalk.green('✓ Telemetry disabled. No usage data will be sent.'));
+          } else if (argv.telemetry) {
+            optIn();
+            console.log(chalk.green('✓ Telemetry enabled. Thanks for helping improve cxgrd!'));
+          } else {
+            const status = isOptedOut() ? chalk.yellow('disabled') : chalk.green('enabled');
+            console.log(`Telemetry: ${status}`);
+            console.log(chalk.gray('  cxgrd config --no-telemetry   disable'));
+            console.log(chalk.gray('  cxgrd config --telemetry       enable'));
+          }
         },
+      )
+      .command(
+        'doctor [path]',
+        'Check runtime, compiler tools, and project readiness',
+        (y: any) => y.positional('path', { describe: 'Project path (optional)', type: 'string' }),
+        async (argv: any) => { trackEvent('cli_doctor'); await doctorCommand(argv.path as string); },
       )
       .command(
         'init-hooks [path]',
         'Set up pre-commit hooks for architecture checks',
         (y: any) =>
           y
-            .positional('path', {
-              describe: 'Project path (default: current directory)',
-              type: 'string',
-            })
-            .option('block-critical', {
-              describe: 'Block commits on critical risk',
-              type: 'boolean',
-              default: true,
-            })
-            .option('block-high', {
-              describe: 'Block commits on high risk',
-              type: 'boolean',
-              default: false,
-            })
-            .option('warn-medium', {
-              describe: 'Warn on medium risk',
-              type: 'boolean',
-              default: true,
-            })
-            .option('threshold', {
-              describe: 'Risk threshold (0-100)',
-              type: 'number',
-              default: 70,
-            })
-            .option('uninstall', {
-              describe: 'Uninstall hooks',
-              type: 'boolean',
-              default: false,
-            }),
+            .positional('path',          { describe: 'Project path (default: current directory)', type: 'string' })
+            .option('block-critical',    { type: 'boolean', default: true })
+            .option('block-high',        { type: 'boolean', default: false })
+            .option('warn-medium',       { type: 'boolean', default: true })
+            .option('threshold',         { type: 'number',  default: 70 })
+            .option('uninstall',         { type: 'boolean', default: false }),
         async (argv: any) => {
+          trackEvent('cli_init_hooks', { uninstall: !!argv.uninstall });
           await initHooksCommand(argv.path as string, {
             blockCritical: argv.blockCritical,
-            blockHigh: argv.blockHigh,
-            warnMedium: argv.warnMedium,
-            threshold: argv.threshold,
-            uninstall: argv.uninstall,
+            blockHigh:     argv.blockHigh,
+            warnMedium:    argv.warnMedium,
+            threshold:     argv.threshold,
+            uninstall:     argv.uninstall,
           });
         },
       )
@@ -198,20 +144,9 @@ async function main() {
         'Monitor project for real-time architecture analysis',
         (y: any) =>
           y
-            .positional('path', {
-              describe: 'Project path (default: current directory)',
-              type: 'string',
-            })
-            .option('debounce', {
-              describe: 'Debounce time in ms',
-              type: 'number',
-              default: 500,
-            }),
-        async (argv: any) => {
-          await watchCommand(argv.path as string, {
-            debounce: argv.debounce,
-          });
-        },
+            .positional('path',    { describe: 'Project path (default: current directory)', type: 'string' })
+            .option('debounce',    { type: 'number', default: 500 }),
+        async (argv: any) => { trackEvent('cli_watch'); await watchCommand(argv.path as string, { debounce: argv.debounce }); },
       )
       .version('0.1.0')
       .help()

@@ -12,12 +12,17 @@ import {
   printAuditUsageStatus,
   AuditUsageExceededError,
 } from '../auth/audit-usage';
+import { postCiCheckResult } from '../team/cloud-client';
+import { trackEvent } from '../telemetry';
 
 export interface CheckCommandOptions {
   scope?: CheckScope;
   skipStructural?: boolean;
   skipCompiler?: boolean;
   strict?: boolean;
+  // --ci: post result to server so GitHub commit status gets updated,
+  //       and exit 1 strictly on any issue (no interactive prompts)
+  ci?: boolean;
 }
 
 export async function checkCommand(
@@ -26,18 +31,32 @@ export async function checkCommand(
 ): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
   const scope = options.scope ?? 'all';
+  const isCi = options.ci ?? false;
 
   console.log(chalk.blue('✓ Running cxgrd check...'));
-  if (scope !== 'all') {
-    console.log(chalk.gray(`   Scope: ${scope} files only`));
-  }
-  if (options.strict) {
-    console.log(chalk.gray('   Mode: strict (skipped compilers fail the check)'));
-  }
+  if (scope !== 'all') console.log(chalk.gray(`   Scope: ${scope} files only`));
+  if (options.strict) console.log(chalk.gray('   Mode: strict (skipped compilers fail the check)'));
+  if (isCi) console.log(chalk.gray('   Mode: CI (results posted to server for PR status)'));
 
   try {
-    // Check free tier audit limit before running
     const session = await resolveActiveSession();
+
+    // --ci requires team plan so we can post the result back
+    if (isCi) {
+      if (!session) {
+        console.error(chalk.red('\n✗ --ci requires authentication. Run: cxgrd auth login'));
+        process.exit(1);
+      }
+      if (session.plan !== 'team') {
+        console.error(chalk.red('\n✗ --ci requires a Team plan. Upgrade at https://cxgrd.com/pricing'));
+        process.exit(1);
+      }
+      if (!session.orgId) {
+        console.error(chalk.red('\n✗ --ci: no team found on your account. Ask your team owner to invite you.'));
+        process.exit(1);
+      }
+    }
+
     if (!session || session.plan === 'free') {
       try {
         await checkFreeAuditLimit();
@@ -52,7 +71,7 @@ export async function checkCommand(
 
     const cgDir = new CgDirectory(rootPath);
     const graph = await cgDir.readGraph();
-    const arch = await cgDir.readArch();
+    const arch  = await cgDir.readArch();
     const history = await cgDir.readHistory();
 
     if (!graph) {
@@ -61,7 +80,6 @@ export async function checkCommand(
     }
 
     const scopeFiles = scope === 'all' ? null : resolveScopeFiles(rootPath, scope);
-
     if (scopeFiles && scopeFiles.size === 0) {
       console.log(chalk.yellow('   No files in scope — skipping checks.'));
       return;
@@ -76,21 +94,15 @@ export async function checkCommand(
       projectPath: rootPath,
       scope,
       skipStructural: options.skipStructural ?? false,
-      skipCompiler: options.skipCompiler ?? false,
-      strict: options.strict ?? false,
+      skipCompiler:   options.skipCompiler   ?? false,
+      strict:         options.strict         ?? false,
     });
 
     printCompilerSummary(result.compilerSummary);
 
     if (!options.strict && result.skippedLanguages.length > 0) {
-      console.log(
-        chalk.yellow(
-          `   ⚠ Skipped compiler(s) for: ${result.skippedLanguages.join(', ')} — not counted as failures.`,
-        ),
-      );
-      console.log(
-        chalk.yellow('     Use --strict or run `cxgrd doctor` to fix your toolchain.'),
-      );
+      console.log(chalk.yellow(`   ⚠ Skipped compiler(s) for: ${result.skippedLanguages.join(', ')} — not counted as failures.`));
+      console.log(chalk.yellow('     Use --strict or run `cxgrd doctor` to fix your toolchain.'));
     }
 
     if (result.passed) {
@@ -100,17 +112,12 @@ export async function checkCommand(
       console.log(chalk.red('✗ Issues found:'));
       for (const issue of result.issues) {
         const color =
-          issue.severity === 'error'
-            ? chalk.red
-            : issue.severity === 'warning'
-              ? chalk.yellow
-              : chalk.blue;
+          issue.severity === 'error'   ? chalk.red :
+          issue.severity === 'warning' ? chalk.yellow : chalk.blue;
         const tag = issue.source === 'compiler' ? 'compiler' : 'structural';
-        console.log(
-          color(`   [${issue.severity.toUpperCase()}][${tag}] ${issue.message}`),
-        );
+        console.log(color(`   [${issue.severity.toUpperCase()}][${tag}] ${issue.message}`));
         if (issue.file) {
-          const loc = issue.line ? `:${issue.line}` : '';
+          const loc  = issue.line ? `:${issue.line}` : '';
           const code = issue.code ? ` (${issue.code})` : '';
           console.log(chalk.gray(`          at ${issue.file}${loc}${code}`));
         }
@@ -118,7 +125,6 @@ export async function checkCommand(
       console.log(chalk.gray(`   ${result.summary}`));
     }
 
-    // Increment audit count after successful run (for free tier tracking)
     if (!session || session.plan === 'free') {
       await incrementAuditCount();
       await printAuditUsageStatus();
@@ -128,42 +134,72 @@ export async function checkCommand(
       timestamp: Date.now(),
       type: 'check',
       scope,
-      strict: options.strict ?? false,
-      passed: result.passed,
+      strict:     options.strict ?? false,
+      passed:     result.passed,
       issueCount: result.issues.length,
-      errorCount: result.issues.filter((i) => i.severity === 'error').length,
-      compiler: result.compilerSummary,
+      errorCount: result.issues.filter(i => i.severity === 'error').length,
+      compiler:   result.compilerSummary,
     };
 
     history.push(historyEntry);
     await cgDir.writeHistory(history);
     await cgDir.writeCheckResult({
       timestamp: historyEntry.timestamp,
-      passed: result.passed,
+      passed:    result.passed,
       scope,
-      issues: result.issues,
-      compiler: result.compilerSummary,
-      summary: result.summary,
+      issues:    result.issues,
+      compiler:  result.compilerSummary,
+      summary:   result.summary,
     });
 
     await recordAuditEventIfTeam(session, rootPath, {
       eventType: 'check',
-      passed: result.passed,
-      summary: result.summary,
-      metadata: {
-        issueCount: result.issues.length,
-        scope,
-        strict: options.strict ?? false,
-      },
+      passed:    result.passed,
+      summary:   result.summary,
+      metadata:  { issueCount: result.issues.length, scope, strict: options.strict ?? false, ci: isCi },
     });
 
+    // ── CI mode: post result to server so GitHub commit status is updated ─────
+    if (isCi && session?.orgId) {
+      const gitRef = await resolveGitSha(rootPath);
+      const repoId = rootPath.split(/[/\\]/).pop() ?? 'unknown';
+
+      // fire-and-forget — never block CI on network issues
+      postCiCheckResult(session, {
+        repoId,
+        gitRef,
+        passed:     result.passed,
+        issueCount: result.issues.length,
+        errorCount: result.issues.filter(i => i.severity === 'error').length,
+        summary:    result.summary,
+      }).catch(err => {
+        // Non-fatal in CI — print warning but don't fail the build
+        console.warn(chalk.yellow(`   ⚠ Could not post CI result to server: ${err.message}`));
+      });
+    }
+
+    trackEvent('cli_check', { scope, strict: !!options.strict, ci: isCi, passed: result.passed });
+
+    // In CI mode, exit 1 on any failure — no exceptions
     if (!result.passed) {
+      if (isCi) {
+        console.error(chalk.red('\n✗ CI check failed — blocking merge.'));
+      }
       process.exit(1);
     }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(chalk.red(`✗ Error: ${message}`));
     process.exit(1);
+  }
+}
+
+async function resolveGitSha(rootPath: string): Promise<string> {
+  try {
+    const { execSync } = await import('child_process');
+    return execSync('git rev-parse HEAD', { cwd: rootPath, stdio: 'pipe' }).toString().trim();
+  } catch {
+    return `local-${Date.now()}`;
   }
 }
 
@@ -180,22 +216,17 @@ function printCompilerSummary(
   }>,
 ): void {
   if (summaries.length === 0) return;
-
   console.log(chalk.gray('   Compiler runs:'));
   for (const s of summaries) {
     if (s.skipped) {
-      console.log(
-        chalk.gray(`     · ${s.language} (${s.tool} @ ${s.projectRoot}): skipped — ${s.skipReason}`),
-      );
+      console.log(chalk.gray(`     · ${s.language} (${s.tool} @ ${s.projectRoot}): skipped — ${s.skipReason}`));
       continue;
     }
     const status = s.passed ? chalk.green('ok') : chalk.red('failed');
     console.log(
-      chalk.gray(
-        `     · ${s.language} (${s.tool} @ ${s.projectRoot}): `,
-      ) +
-        status +
-        chalk.gray(` — ${s.errorCount} errors, ${s.warningCount} warnings`),
+      chalk.gray(`     · ${s.language} (${s.tool} @ ${s.projectRoot}): `) +
+      status +
+      chalk.gray(` — ${s.errorCount} errors, ${s.warningCount} warnings`),
     );
   }
 }
