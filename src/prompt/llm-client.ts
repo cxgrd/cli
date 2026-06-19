@@ -58,7 +58,6 @@ async function callCloudPromptApi(
       'Content-Type': 'application/json',
       // Send token in both headers — some proxies strip Authorization on POST
       'Authorization': `Bearer ${token}`,
-      'x-cxgrd-token': token,
     },
     body: JSON.stringify({ context }),
   });
