@@ -16,7 +16,7 @@ const POLL_TIMEOUT_MS = 5 * 60 * 1000;
 export interface ActiveSession {
   token: string;
   plan: SubscriptionPlan;
-  source: 'auth_file' | 'dev_override';
+  source: 'auth_file' | 'env_token' | 'dev_override';
   email?: string;
   orgId?: string;
   orgName?: string;
@@ -24,6 +24,7 @@ export interface ActiveSession {
 }
 
 export async function resolveActiveSession(): Promise<ActiveSession | null> {
+  // 1. Dev override (local dev only)
   const devPlan = envString('CXGRD_DEV_PLAN');
   if (devPlan) {
     const plan = normalizePlan(devPlan);
@@ -39,6 +40,24 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
     }
   }
 
+  // 2. CI environment — CXGRD_AUTH_TOKEN set as GitHub Actions secret
+  // No auth file exists in CI, so we read the JWT directly from the env var
+  // and decode plan/orgId/role from it without hitting the network.
+  const envToken = process.env.CXGRD_AUTH_TOKEN;
+  if (envToken) {
+    const decoded = decodeJwtPayload(envToken);
+    return {
+      token: envToken,
+      plan: normalizePlan(decoded?.plan),
+      source: 'env_token',
+      email: decoded?.email,
+      orgId: decoded?.team_id,
+      orgName: undefined,
+      role: normalizeRole(decoded?.team_role),
+    };
+  }
+
+  // 3. Normal interactive login — reads from ~/.cg/auth.json
   const stored = await readAuth();
   if (!stored) return null;
 
@@ -51,6 +70,19 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
     orgName: stored.orgName,
     role: normalizeRole(stored.role),
   };
+}
+
+// Decode JWT payload without verifying signature — safe here because
+// we're just reading claims for local use. The server always re-verifies.
+function decodeJwtPayload(token: string): Record<string, string> | null {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const decoded = Buffer.from(parts[1], 'base64url').toString('utf8');
+    return JSON.parse(decoded) as Record<string, string>;
+  } catch {
+    return null;
+  }
 }
 
 export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
@@ -67,31 +99,19 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
         headers: { Accept: 'application/json' },
       });
     } catch {
-      // Network error — wait and retry
       await sleep(POLL_INTERVAL_MS);
       continue;
     }
 
-    // 501 = server not configured — hard stop
     if (response.status === 501) {
       throw new Error(
         'Auth API is not available yet. For local dev set CXGRD_DEV_PLAN=pro in .env',
       );
     }
 
-    // 404 = session not found yet — retry (brief race condition on first poll)
-    if (response.status === 404) {
-      await sleep(POLL_INTERVAL_MS);
-      continue;
-    }
+    if (response.status === 404) { await sleep(POLL_INTERVAL_MS); continue; }
+    if (response.status === 202) { await sleep(POLL_INTERVAL_MS); continue; }
 
-    // 202 = still pending, user hasn't completed GitHub login yet
-    if (response.status === 202) {
-      await sleep(POLL_INTERVAL_MS);
-      continue;
-    }
-
-    // 410 = session expired
     if (response.status === 410) {
       throw new Error('Session expired. Run cxgrd auth login again.');
     }
@@ -116,10 +136,7 @@ export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
     };
 
     const token = data.token || data.access_token;
-    if (!token) {
-      await sleep(POLL_INTERVAL_MS);
-      continue;
-    }
+    if (!token) { await sleep(POLL_INTERVAL_MS); continue; }
 
     return {
       token,
