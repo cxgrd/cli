@@ -62,7 +62,7 @@ export function optIn(): void {
 export function printFirstRunNotice(): void {
   if (fs.existsSync(TELEMETRY_PATH)) return;
   console.log(
-    '\x1b[90mℹ  Anonymous usage stats help improve cxgrd. Disable: cxgrd config --no-telemetry\x1b[0m',
+    '\x1b[90mℹ  Anonymous usage stats help improve cxgrd. Disable: cxgrd config --disable-telemetry\x1b[0m',
   );
 }
 
