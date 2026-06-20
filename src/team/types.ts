@@ -42,9 +42,9 @@ export interface AuditEventPayload {
   eventType: 'scan' | 'input' | 'check' | 'sync' | 'precommit' | 'prompt';
   repoId: string;
   gitRef: string;
-  riskScore?: number;
+  // blastRadius matches the API field name exactly
+  blastRadius?: number;
   riskLevel?: string;
-  affectedCount?: number;
   passed?: boolean;
   summary?: string;
   metadata?: Record<string, unknown>;

@@ -31,10 +31,40 @@ export async function promptCommand(changeDescription: string, projectPath?: str
       process.exit(1);
     }
 
+    // Read the last blast radius result from history — produced by `cxgrd input`
+    // These are already resolved, cwd-filtered files so we pass them directly
+    // to the subgraph builder instead of re-resolving from scratch.
+    const history = await cgDir.readHistory();
+    const lastInput = [...history]
+      .reverse()
+      .find((h: any) => h.type === 'input' || h.description);
+
+    const preSolvedFiles: string[] = [];
+    if (lastInput) {
+      // Read the last blast radius result which has the resolved affected files
+      const lastCheck = await cgDir.readCheckResult().catch(() => null);
+      // Also try reading from last-blast.json if it exists
+      const lastBlast = await cgDir.readLastBlast().catch(() => null);
+      if (lastBlast?.affectedFiles?.length) {
+        for (const f of lastBlast.affectedFiles.slice(0, 20)) {
+          if (typeof f === 'string') preSolvedFiles.push(f);
+          else if (f?.path) preSolvedFiles.push(f.path);
+        }
+      }
+    }
+
     const memory = await readRepoMemory(cgDir);
     const repoMemoryBlock = formatMemoryForPrompt(memory, patterns);
 
-    const subgraph = buildPromptSubgraph(changeDescription, graph, symbols, arch, rootPath);
+    // Pass pre-solved files so subgraph builder skips broad re-resolution
+    const subgraph = buildPromptSubgraph(
+      changeDescription,
+      graph,
+      symbols,
+      arch,
+      rootPath,
+      preSolvedFiles.length > 0 ? preSolvedFiles : undefined,
+    );
     const contextPayload = serializeSubgraphForLlm(subgraph, repoMemoryBlock);
 
     console.log(chalk.gray('   Calling LLM with architectural subgraph + repo memory...'));
@@ -57,10 +87,10 @@ export async function promptCommand(changeDescription: string, projectPath?: str
         model,
         affectedCount: subgraph.affectedFiles.length,
         riskLevel: subgraph.riskLevel,
+        usedPreSolvedFiles: preSolvedFiles.length > 0,
       },
     });
 
-    const history = await cgDir.readHistory();
     history.push({
       timestamp: Date.now(),
       type: 'prompt',

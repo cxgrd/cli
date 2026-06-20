@@ -12,6 +12,7 @@ import {
   printAuditUsageStatus,
   AuditUsageExceededError,
 } from '../auth/audit-usage';
+import chalk from 'chalk';
 
 export async function inputCommand(description: string, projectPath?: string): Promise<void> {
   const rootPath = resolve(projectPath || process.cwd());
@@ -87,14 +88,25 @@ export async function inputCommand(description: string, projectPath?: string): P
     }
 
     const analyzer = new BlastRadiusAnalyzer(graph);
-    // Pass description so classifyChanges can use intent keywords (refactor, rename, etc.)
     const result = analyzer.analyze(uniqueFiles.length > 0 ? uniqueFiles : [], description);
 
     displayBlastRadiusResults(result);
 
+    // Save blast result so `cxgrd prompt` can reuse already-resolved files
+    // instead of re-running broad graph matching from scratch
+    await cgDir.writeLastBlast({
+      description,
+      seedFiles: uniqueFiles,
+      affectedFiles: result.affectedFiles,
+      riskLevel: result.riskLevel,
+      totalRisk: result.totalRisk,
+      timestamp: Date.now(),
+    });
+
     const history = await cgDir.readHistory();
     history.push({
       timestamp: Date.now(),
+      type: 'input',
       description,
       affectedCount: result.directlyAffected + result.transitivelyAffected,
       status: 'pending',
@@ -113,6 +125,7 @@ export async function inputCommand(description: string, projectPath?: string): P
     });
 
     RichOutput.success('Blast radius analysis saved to history');
+    console.log(chalk.gray('   Tip: run `cxgrd prompt "same description"` to get an LLM prompt targeting these files.'));
 
     if (!session || session.plan === 'free') {
       await incrementAuditCount();

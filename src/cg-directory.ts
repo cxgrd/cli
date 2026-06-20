@@ -28,127 +28,110 @@ export class CgDirectory {
   async initialize(): Promise<void> {
     try {
       await mkdir(this.cgPath, { recursive: true });
-    } catch (err) {
-      // Directory might already exist
+    } catch {
+      // already exists
     }
   }
 
   async writeGraph(graphData: any): Promise<void> {
     await this.initialize();
-    const graphPath = join(this.cgPath, 'graph.json');
-    await writeFile(graphPath, JSON.stringify(graphData, null, 2));
+    await writeFile(join(this.cgPath, 'graph.json'), JSON.stringify(graphData, null, 2));
   }
 
   async writeSymbols(symbolsData: any): Promise<void> {
     await this.initialize();
-    const symbolsPath = join(this.cgPath, 'symbols.json');
-    await writeFile(symbolsPath, JSON.stringify(symbolsData, null, 2));
+    await writeFile(join(this.cgPath, 'symbols.json'), JSON.stringify(symbolsData, null, 2));
   }
 
   async writeArch(archData: any): Promise<void> {
     await this.initialize();
-    const archPath = join(this.cgPath, 'arch.json');
-    await writeFile(archPath, JSON.stringify(archData, null, 2));
+    await writeFile(join(this.cgPath, 'arch.json'), JSON.stringify(archData, null, 2));
   }
 
   async writeHistory(historyData: any[]): Promise<void> {
     await this.initialize();
-    const historyPath = join(this.cgPath, 'history.json');
-    await writeFile(historyPath, JSON.stringify(historyData, null, 2));
+    await writeFile(join(this.cgPath, 'history.json'), JSON.stringify(historyData, null, 2));
   }
 
   async writePatterns(patternsData: any): Promise<void> {
     await this.initialize();
-    const patternsPath = join(this.cgPath, 'patterns.json');
-    await writeFile(patternsPath, JSON.stringify(patternsData, null, 2));
+    await writeFile(join(this.cgPath, 'patterns.json'), JSON.stringify(patternsData, null, 2));
   }
 
   async writeMeta(meta: CgMeta): Promise<void> {
     await this.initialize();
-    const metaPath = join(this.cgPath, 'meta.json');
-    await writeFile(metaPath, JSON.stringify(meta, null, 2));
-  }
-
-  async readGraph(): Promise<any> {
-    try {
-      const graphPath = join(this.cgPath, 'graph.json');
-      const data = await readFile(graphPath, 'utf-8');
-      return JSON.parse(data);
-    } catch (err) {
-      return null;
-    }
-  }
-
-  async readHistory(): Promise<any[]> {
-    try {
-      const historyPath = join(this.cgPath, 'history.json');
-      const data = await readFile(historyPath, 'utf-8');
-      return JSON.parse(data);
-    } catch (err) {
-      return [];
-    }
-  }
-
-  async readArch(): Promise<any> {
-    try {
-      const archPath = join(this.cgPath, 'arch.json');
-      const data = await readFile(archPath, 'utf-8');
-      return JSON.parse(data);
-    } catch (err) {
-      return null;
-    }
-  }
-
-  async readPatterns(): Promise<CgPatternsFile | null> {
-    try {
-      const patternsPath = join(this.cgPath, 'patterns.json');
-      const data = await readFile(patternsPath, 'utf-8');
-      return JSON.parse(data) as CgPatternsFile;
-    } catch (err) {
-      return null;
-    }
-  }
-
-  async readSymbols(): Promise<Record<string, string[]>> {
-    try {
-      const symbolsPath = join(this.cgPath, 'symbols.json');
-      const data = await readFile(symbolsPath, 'utf-8');
-      return JSON.parse(data);
-    } catch (err) {
-      return {};
-    }
-  }
-
-  async readMemory(): Promise<CgMemoryFile | null> {
-    try {
-      const memoryPath = join(this.cgPath, 'memory.json');
-      const data = await readFile(memoryPath, 'utf-8');
-      return JSON.parse(data) as CgMemoryFile;
-    } catch (err) {
-      return null;
-    }
-  }
-
-  async writeMemory(memory: CgMemoryFile): Promise<void> {
-    await this.initialize();
-    const memoryPath = join(this.cgPath, 'memory.json');
-    await writeFile(memoryPath, JSON.stringify(memory, null, 2));
+    await writeFile(join(this.cgPath, 'meta.json'), JSON.stringify(meta, null, 2));
   }
 
   async writeCheckResult(result: unknown): Promise<void> {
     await this.initialize();
-    const checkPath = join(this.cgPath, 'check-latest.json');
-    await writeFile(checkPath, JSON.stringify(result, null, 2));
+    await writeFile(join(this.cgPath, 'check-latest.json'), JSON.stringify(result, null, 2));
+  }
+
+  // Persists the last blast radius result so `cxgrd prompt` can reuse
+  // already-resolved files instead of re-running broad graph matching
+  async writeLastBlast(result: unknown): Promise<void> {
+    await this.initialize();
+    await writeFile(join(this.cgPath, 'last-blast.json'), JSON.stringify(result, null, 2));
+  }
+
+  async readGraph(): Promise<any> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'graph.json'), 'utf-8'));
+    } catch { return null; }
+  }
+
+  async readHistory(): Promise<any[]> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'history.json'), 'utf-8'));
+    } catch { return []; }
+  }
+
+  async readArch(): Promise<any> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'arch.json'), 'utf-8'));
+    } catch { return null; }
+  }
+
+  async readPatterns(): Promise<CgPatternsFile | null> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'patterns.json'), 'utf-8')) as CgPatternsFile;
+    } catch { return null; }
+  }
+
+  async readSymbols(): Promise<Record<string, string[]>> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'symbols.json'), 'utf-8'));
+    } catch { return {}; }
+  }
+
+  async readMemory(): Promise<CgMemoryFile | null> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'memory.json'), 'utf-8')) as CgMemoryFile;
+    } catch { return null; }
+  }
+
+  async writeMemory(memory: CgMemoryFile): Promise<void> {
+    await this.initialize();
+    await writeFile(join(this.cgPath, 'memory.json'), JSON.stringify(memory, null, 2));
+  }
+
+  async readCheckResult(): Promise<any> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'check-latest.json'), 'utf-8'));
+    } catch { return null; }
+  }
+
+  async readLastBlast(): Promise<any> {
+    try {
+      return JSON.parse(await readFile(join(this.cgPath, 'last-blast.json'), 'utf-8'));
+    } catch { return null; }
   }
 
   async readMeta(): Promise<CgMeta | null> {
     try {
-      const metaPath = join(this.cgPath, 'meta.json');
-      const data = await readFile(metaPath, 'utf-8');
-      return JSON.parse(data);
-    } catch (err) {
-      return null;
-    }
+      return JSON.parse(await readFile(join(this.cgPath, 'meta.json'), 'utf-8')) as CgMeta;
+    } catch { return null; }
   }
 
   getPath(): string {
