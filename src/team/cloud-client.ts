@@ -17,6 +17,7 @@ function authHeaders(token: string): Record<string, string> {
   return {
     Accept: 'application/json',
     'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
   };
 }
 
