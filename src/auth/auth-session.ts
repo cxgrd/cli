@@ -37,34 +37,34 @@ function decodeJwtPayload(token: string): Record<string, string> | null {
 
 export async function resolveActiveSession(): Promise<ActiveSession | null> {
   // 1. Dev override (local dev only)
-  const devPlan = envString('CXGRD_DEV_PLAN');
-  if (devPlan) {
-    const plan = normalizePlan(devPlan);
-    if (plan !== 'free') {
-      return {
-        token:   envString('CXGRD_DEV_TOKEN', 'dev-local'),
-        plan,
-        source:  'dev_override',
-        orgId:   envString('CXGRD_DEV_ORG_ID', 'org_dev'),
-        orgName: envString('CXGRD_DEV_ORG_NAME', 'Dev Org'),
-        role:    normalizeRole(envString('CXGRD_DEV_ROLE', 'dev')),
-      };
-    }
-  }
+  // const devPlan = envString('CXGRD_DEV_PLAN');
+  // if (devPlan) {
+  //   const plan = normalizePlan(devPlan);
+  //   if (plan !== 'free') {
+  //     return {
+  //       token:   envString('CXGRD_DEV_TOKEN', 'dev-local'),
+  //       plan,
+  //       source:  'dev_override',
+  //       orgId:   envString('CXGRD_DEV_ORG_ID', 'org_dev'),
+  //       orgName: envString('CXGRD_DEV_ORG_NAME', 'Dev Org'),
+  //       role:    normalizeRole(envString('CXGRD_DEV_ROLE', 'dev')),
+  //     };
+  //   }
+  // }
 
   // 2. CI environment — CXGRD_AUTH_TOKEN set as GitHub Actions secret
-  const envToken = process.env.CXGRD_AUTH_TOKEN;
-  if (envToken) {
-    const decoded = decodeJwtPayload(envToken);
-    return {
-      token:  envToken,
-      plan:   normalizePlan(decoded?.plan),
-      source: 'env_token',
-      email:  decoded?.email,
-      orgId:  decoded?.team_id,
-      role:   normalizeRole(decoded?.team_role),
-    };
-  }
+  // const envToken = process.env.CXGRD_AUTH_TOKEN;
+  // if (envToken) {
+  //   const decoded = decodeJwtPayload(envToken);
+  //   return {
+  //     token:  envToken,
+  //     plan:   normalizePlan(decoded?.plan),
+  //     source: 'env_token',
+  //     email:  decoded?.email,
+  //     orgId:  decoded?.team_id,
+  //     role:   normalizeRole(decoded?.team_role),
+  //   };
+  // }
 
   // 3. Normal interactive login — reads from ~/.cg/auth.json
   const stored = await readAuth();
