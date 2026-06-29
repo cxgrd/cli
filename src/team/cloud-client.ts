@@ -8,6 +8,7 @@ import {
   devPutGraph,
   isDevCloudEnabled,
 } from './dev-store';
+import { ImpactedFile } from '../utils/blast-radius-analyzer';
 
 function apiBase(): string {
   return envString('CXGRD_AUTH_BASE_URL', 'https://www.cxgrd.com').replace(/\/$/, '');
@@ -123,6 +124,10 @@ export async function postCiCheckResult(
   payload: {
     repoId: string;
     gitRef: string;
+    changedFiles : string[];
+    blastRadius: number;
+    impactedFiles: ImpactedFile[];
+    riskLevel: "critical" | "high" | "medium" | "low";
     passed: boolean;
     issueCount: number;
     errorCount: number;
@@ -146,7 +151,7 @@ export async function fetchOrgPolicy(session: ActiveSession): Promise<OrgPolicyD
   const teamId = session.orgId;
   if (!teamId) throw new Error('No team on this account.');
   if (useDevStore(session)) return (await devGetPolicy(teamId))!;
-  const res = await apiFetch(`/api/teams/${teamId}/policies`, session.token, { method: 'GET' });
+  const res = await apiFetch(`/api/teams/${teamId}/merge-policies`, session.token, { method: 'GET' });
   if (res.status === 404 || res.status === 501) return (await devGetPolicy(teamId))!;
   if (!res.ok) {
     const body = await res.text().catch(() => '');

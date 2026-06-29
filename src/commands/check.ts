@@ -14,6 +14,8 @@ import {
 } from '../auth/audit-usage';
 import { postCiCheckResult } from '../team/cloud-client';
 import { trackEvent } from '../telemetry';
+import { execSync } from 'child_process';
+import { BlastRadiusAnalyzer } from '../utils/blast-radius-analyzer';
 
 export interface CheckCommandOptions {
   scope?: CheckScope;
@@ -160,20 +162,31 @@ export async function checkCommand(
     });
 
     // ── CI mode: post result to server so GitHub commit status is updated ─────
+    // CI mode: post result to server so GitHub commit status is updated
     if (isCi && session?.orgId) {
       const gitRef = await resolveGitSha(rootPath);
-      const repoId = rootPath.split(/[/\\]/).pop() ?? 'unknown';
+      const repoId = rootPath.split(/[/\\\\]/).pop() ?? 'unknown';
 
-      // fire-and-forget — never block CI on network issues
+      const changedFiles = execSync('git diff --name-only origin/main...HEAD')
+        .toString().trim().split('\n').filter(Boolean);
+
+      // graph is already in scope from above — no need to re-read
+      const analyzer = new BlastRadiusAnalyzer(graph);
+      // no description in CI — file-path classification handles it
+      const blastResult = analyzer.analyze(changedFiles);
+
       postCiCheckResult(session, {
         repoId,
         gitRef,
-        passed:     result.passed,
-        issueCount: result.issues.length,
-        errorCount: result.issues.filter(i => i.severity === 'error').length,
-        summary:    result.summary,
+        changedFiles,
+        blastRadius:   blastResult.totalRisk,
+        impactedFiles: blastResult.affectedFiles,
+        riskLevel:     blastResult.riskLevel,
+        passed:        result.passed,
+        issueCount:    result.issues.length,
+        errorCount:    result.issues.filter(i => i.severity === 'error').length,
+        summary:       result.summary,
       }).catch(err => {
-        // Non-fatal in CI — print warning but don't fail the build
         console.warn(chalk.yellow(`   ⚠ Could not post CI result to server: ${err.message}`));
       });
     }
