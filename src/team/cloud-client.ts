@@ -10,7 +10,7 @@ import {
 } from './dev-store';
 
 function apiBase(): string {
-  return envString('CXGRD_AUTH_BASE_URL', 'https://cxgrd.com').replace(/\/$/, '');
+  return envString('CXGRD_AUTH_BASE_URL', 'https://www.cxgrd.com').replace(/\/$/, '');
 }
 
 function authHeaders(token: string): Record<string, string> {
