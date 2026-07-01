@@ -6,7 +6,8 @@ import { randomUUID } from 'crypto';
 
 // PostHog public write-only key — safe to ship in CLI source
 const POSTHOG_KEY = 'phc_PvPYwxDBSkjfgTX3506gCplb8TL1FSnKUkdFZDlNEFu';
-const POSTHOG_HOST = 'us.i.posthog.com';
+const POSTHOG_URL = 'https://us.i.posthog.com';
+const url = new URL(POSTHOG_URL);
 const CLI_VERSION = '0.1.0';
 
 const CONFIG_DIR = path.join(os.homedir(), '.cg');
@@ -87,7 +88,7 @@ export function trackEvent(event: string, props: Record<string, unknown> = {}): 
 
   try {
     const req = https.request({
-      hostname: POSTHOG_HOST,
+      hostname: url.hostname,
       path: '/capture/',
       method: 'POST',
       headers: {
