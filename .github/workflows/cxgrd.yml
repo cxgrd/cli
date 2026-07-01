@@ -1,0 +1,33 @@
+name: cxgrd check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  cxgrd:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # needed so git diff can compare against main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install cxgrd
+        run: npm install -g cxgrd
+
+      - name: Run cxgrd scan
+        run: cxgrd scan
+        env:
+          CXGRD_AUTH_TOKEN: ${{ secrets.CXGRD_AUTH_TOKEN }}
+
+      - name: Run cxgrd check
+        run: cxgrd check --ci
+        env:
+          CXGRD_AUTH_TOKEN: ${{ secrets.CXGRD_AUTH_TOKEN }}
