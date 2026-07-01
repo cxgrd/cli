@@ -53,18 +53,18 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
   // }
 
   // 2. CI environment — CXGRD_AUTH_TOKEN set as GitHub Actions secret
-  // const envToken = process.env.CXGRD_AUTH_TOKEN;
-  // if (envToken) {
-  //   const decoded = decodeJwtPayload(envToken);
-  //   return {
-  //     token:  envToken,
-  //     plan:   normalizePlan(decoded?.plan),
-  //     source: 'env_token',
-  //     email:  decoded?.email,
-  //     orgId:  decoded?.team_id,
-  //     role:   normalizeRole(decoded?.team_role),
-  //   };
-  // }
+  const envToken = process.env.CXGRD_AUTH_TOKEN;
+  if (envToken) {
+    const decoded = decodeJwtPayload(envToken);
+    return {
+      token:  envToken,
+      plan:   normalizePlan(decoded?.plan),
+      source: 'env_token',
+      email:  decoded?.email,
+      orgId:  decoded?.team_id,
+      role:   normalizeRole(decoded?.team_role),
+    };
+  }
 
   // 3. Normal interactive login — reads from ~/.cg/auth.json
   const stored = await readAuth();

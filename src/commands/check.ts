@@ -16,6 +16,7 @@ import { postCiCheckResult } from '../team/cloud-client';
 import { trackEvent } from '../telemetry';
 import { execSync } from 'child_process';
 import { BlastRadiusAnalyzer } from '../utils/blast-radius-analyzer';
+import {resolveRepoFullName, resolveGitSha} from '../utils/git';
 
 export interface CheckCommandOptions {
   scope?: CheckScope;
@@ -165,7 +166,7 @@ export async function checkCommand(
     // CI mode: post result to server so GitHub commit status is updated
     if (isCi && session?.orgId) {
       const gitRef = await resolveGitSha(rootPath);
-      const repoId = rootPath.split(/[/\\\\]/).pop() ?? 'unknown';
+      const repoId = await resolveRepoFullName(rootPath);
 
       const changedFiles = execSync('git diff --name-only origin/main...HEAD')
         .toString().trim().split('\n').filter(Boolean);
@@ -204,15 +205,6 @@ export async function checkCommand(
     const message = err instanceof Error ? err.message : String(err);
     console.error(chalk.red(`✗ Error: ${message}`));
     process.exit(1);
-  }
-}
-
-async function resolveGitSha(rootPath: string): Promise<string> {
-  try {
-    const { execSync } = await import('child_process');
-    return execSync('git rev-parse HEAD', { cwd: rootPath, stdio: 'pipe' }).toString().trim();
-  } catch {
-    return `local-${Date.now()}`;
   }
 }
 

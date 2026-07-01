@@ -16,6 +16,7 @@ import {
   AuditUsageExceededError,
 } from '../auth/audit-usage';
 import { postAuditEvent, postHealthSnapshot } from '../team/cloud-client';
+import {resolveRepoFullName, resolveGitSha} from '../utils/git';
 import type { ActiveSession } from '../auth/auth-session';
 
 export interface ScanCommandOptions {
@@ -160,7 +161,7 @@ export async function scanCommand(
 
     // ── Post health snapshot + audit event (team only, fire-and-forget) ───────
     if (options.team && session?.orgId) {
-      const repoId = meta.projectPath.split(/[/\\]/).pop() ?? 'unknown';
+      const repoId = await resolveRepoFullName(rootPath);
       const commitSha = await resolveGitSha(rootPath);
       const healthMetrics = computeHealthMetrics(graph, patterns);
 
@@ -194,18 +195,6 @@ export async function scanCommand(
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-async function resolveGitSha(rootPath: string): Promise<string> {
-  try {
-    const { execSync } = await import('child_process');
-    return execSync('git rev-parse --short HEAD', { cwd: rootPath, stdio: 'pipe' })
-      .toString()
-      .trim();
-  } catch {
-    // Not a git repo or git not installed — use timestamp as fallback
-    return `local-${Date.now()}`;
-  }
-}
 
 function computeHealthMetrics(
   graph: { files?: Record<string, unknown>; stats: { totalDependencies: number } },
