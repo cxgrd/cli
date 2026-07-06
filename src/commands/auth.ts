@@ -67,7 +67,16 @@ export async function authLoginCommand(): Promise<void> {
 }
 
 export async function authLogoutCommand(): Promise<void> {
+  const stored = await readAuth();
   await clearAuth();
+  try {
+    await fetch(`${process.env.CXGRD_AUTH_BASE_URL || 'https://www.cxgrd.com'}/api/auth/me`, {
+      method : 'POST',
+      headers : stored?.token ? { Authorization: `Bearer ${stored.token}` } : {},
+    })
+  } catch{
+    //clearing cookie is sufficient, ignore errors}
+  }
   console.log(chalk.green('✓ Signed out. Pro features disabled until you log in again.'));
 }
 
