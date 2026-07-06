@@ -1,6 +1,6 @@
 {
   "name": "cxgrd",
-  "version": "0.1.34",
+  "version": "0.1.35",
   "description": "AI context guardrail CLI — dependency-aware architecture safety for AI-assisted development",
   "main": "dist/index.js",
   "bin": {
@@ -19,15 +19,15 @@
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
-    "yargs": "^17.7.2",
     "chalk": "^5.3.0",
     "chokidar": "^3.5.3",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "yargs": "^17.7.2"
   },
   "devDependencies": {
-    "tsx": "^4.7.0",
     "@types/node": "^20.10.6",
-    "@types/yargs": "^17.0.31"
+    "@types/yargs": "^17.0.31",
+    "tsx": "^4.7.0"
   },
   "engines": {
     "node": ">=18.0.0"
