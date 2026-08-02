@@ -153,8 +153,8 @@ export class ChangeDetector {
     try {
       const flagStr = flag ? `${flag} ` : '';
       const output = execSync(
-        `git diff ${flagStr}--name-only --diff-filter=ACMRUXB`,
-        { cwd: this.projectRoot, encoding: 'utf-8' }
+        `git diff ${flagStr}--name-only --diff-filter=ACMRUX`,
+        { cwd: this.projectRoot, encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }
       );
       return output.split('\n').filter(f => f.length > 0);
     } catch {

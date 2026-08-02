@@ -96,7 +96,7 @@ if [ ! -f "$HOOK_CONFIG" ]; then
 fi
 
 # Get staged files
-STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMRUXB)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMRUX)
 
 if [ -z "$STAGED_FILES" ]; then
   exit 0
@@ -118,7 +118,7 @@ exit 0
 
   private createWindowsHook(): void {
     const batScript = `@echo off
-    git diff --cached --name-only --diff-filter=ACMRUXB > nul 2>&1
+    git diff --cached --name-only --diff-filter=ACMRUX > nul 2>&1
     if %errorlevel% neq 0 exit /b 0
     echo Running cxgrd team precommit...
     cxgrd team precommit
@@ -239,7 +239,7 @@ exit 0
    */
   getStagedFiles(): string[] {
     try {
-      const output = execSync('git diff --cached --name-only --diff-filter=ACMRUXB', {
+      const output = execSync('git diff --cached --name-only --diff-filter=ACMRUX', {
         cwd: this.projectRoot,
         encoding: 'utf-8',
       });
