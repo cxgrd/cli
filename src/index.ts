@@ -39,10 +39,11 @@ async function main() {
         (y: any) =>
           y
             .positional('description', { describe: 'Description of the change', type: 'string' })
-            .option('path', { describe: 'Project path (default: current directory)', type: 'string', alias: 'p' }),
+            .option('path', { describe: 'Project path (default: current directory)', type: 'string', alias: 'p' })
+            .option('json', { describe: 'Output results in JSON format', type: 'boolean', default: false }),
         async (argv: any) => {
           trackEvent('cli_input');
-          await inputCommand(argv.description as string, argv.path as string);
+          await inputCommand(argv.description as string, argv.path as string, { json: argv.json });
         },
       )
       .command(
@@ -150,7 +151,7 @@ async function main() {
             .option('debounce',  { type: 'number', default: 500 }),
         async (argv: any) => { trackEvent('cli_watch'); await watchCommand(argv.path as string, { debounce: argv.debounce }); },
       )
-      .version('0.1.37')
+      .version('0.1.38')
       .help()
       .alias('h', 'help')
       .epilogue(chalk.gray('For more information, visit: https://cxgrd.com'))

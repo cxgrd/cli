@@ -1,6 +1,6 @@
 import { resolve } from 'path';
 import { CgDirectory } from '../cg-directory';
-import { BlastRadiusAnalyzer } from '../utils/blast-radius-analyzer';
+import { BlastRadiusAnalyzer, BlastRadiusResult } from '../utils/blast-radius-analyzer';
 import { ChangeDetector } from '../utils/change-detector';
 import { RichOutput, CLIFormatter } from '../utils/cli-formatter';
 import { appendMemorySession } from '../memory/repo-memory';
@@ -14,11 +14,18 @@ import {
 } from '../auth/audit-usage';
 import chalk from 'chalk';
 
-export async function inputCommand(description: string, projectPath?: string): Promise<void> {
+export async function inputCommand(
+  description: string,
+  projectPath?: string,
+  opts: { json?: boolean } = {}
+): Promise<BlastRadiusResult> {
+  const json = !!opts.json;
   const rootPath = resolve(projectPath || process.cwd());
 
-  RichOutput.header('Blast Radius Analysis');
-  RichOutput.info(`Analyzing change: "${description}"`);
+  if (!json) {
+    RichOutput.header('Blast Radius Analysis');
+    RichOutput.info(`Analyzing change: "${description}"`);
+  }
 
   try {
     const session = await resolveActiveSession();
@@ -27,7 +34,11 @@ export async function inputCommand(description: string, projectPath?: string): P
         await checkFreeAuditLimit();
       } catch (err) {
         if (err instanceof AuditUsageExceededError) {
-          RichOutput.error(err.message);
+          if (json) {
+            console.log(JSON.stringify({ error: err.message, code: 'AUDIT_LIMIT_EXCEEDED' }));
+          } else {
+            RichOutput.error(err.message);
+          }
           process.exit(1);
         }
         throw err;
@@ -38,7 +49,11 @@ export async function inputCommand(description: string, projectPath?: string): P
     const graph = await cgDir.readGraph();
 
     if (!graph) {
-      RichOutput.error('No dependency graph found. Run "cxgrd scan" first.');
+      if (json) {
+        console.log(JSON.stringify({ error: 'No dependency graph found. Run "cxgrd scan" first.', code: 'NO_GRAPH' }));
+      } else {
+        RichOutput.error('No dependency graph found. Run "cxgrd scan" first.');
+      }
       process.exit(1);
     }
 
@@ -64,7 +79,9 @@ export async function inputCommand(description: string, projectPath?: string): P
       if (descriptionTokens.has(sym)) {
         if (!symbolMatches.includes(filePath)) {
           symbolMatches.push(filePath);
-          RichOutput.info(`Symbol match: "${sym}" → ${filePath}`);
+          if (!json){
+            RichOutput.info(`Symbol match: "${sym}" → ${filePath}`);
+          }
         }
       }
     }
@@ -81,16 +98,18 @@ export async function inputCommand(description: string, projectPath?: string): P
       ...symbolMatches,
     ])];
 
-    if (uniqueFiles.length === 0) {
-      RichOutput.warning('Could not identify changed files. Using heuristics based on description.');
-    } else {
-      RichOutput.info(`Detected ${uniqueFiles.length} changed file(s)`);
+    if (!json){
+      if (uniqueFiles.length === 0) {
+        RichOutput.warning('Could not identify changed files. Using heuristics based on description.');
+      } else {
+        RichOutput.info(`Detected ${uniqueFiles.length} changed file(s)`);
+      }
     }
 
     const analyzer = new BlastRadiusAnalyzer(graph);
     const result = analyzer.analyze(uniqueFiles.length > 0 ? uniqueFiles : [], description);
 
-    displayBlastRadiusResults(result);
+    displayBlastRadiusResults(result, json);
 
     // Save blast result so `cxgrd prompt` can reuse already-resolved files
     // instead of re-running broad graph matching from scratch
@@ -124,7 +143,7 @@ export async function inputCommand(description: string, projectPath?: string): P
       },
     });
 
-    RichOutput.success('Blast radius analysis saved to history');
+    if (!json) RichOutput.success('Blast radius analysis saved to history');
     console.log(chalk.gray('   Tip: run `cxgrd prompt "same description"` to get an LLM prompt targeting these files.'));
 
     if (!session || session.plan === 'free') {
@@ -140,13 +159,17 @@ export async function inputCommand(description: string, projectPath?: string): P
       summary: description.slice(0, 200),
     });
 
+    return result;
+
   } catch (err: any) {
-    RichOutput.error(err.message);
+    if (!json) RichOutput.error(err.message);
     process.exit(1);
   }
 }
 
-function displayBlastRadiusResults(result: any): void {
+function displayBlastRadiusResults(result: BlastRadiusResult, json: any): void {
+  if (json) return;
+
   RichOutput.blank();
   RichOutput.section('Impact Summary');
 
