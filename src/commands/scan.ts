@@ -57,10 +57,9 @@ export interface ScanResult {
 export async function scanCommand(
   projectPath?: string,
   options: ScanCommandOptions = {},
-  opts: { json?: boolean } = {}
 ): Promise<ScanResult | undefined> {
-  const out = makeLogger(!!opts.json);
-  const json = !!opts.json;
+  const out = makeLogger(!!options.json);
+  const json = !!options.json;
   const rootPath = resolve(projectPath || process.cwd());
 
   out.log(chalk.blue('🔍 Scanning project...'));

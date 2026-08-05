@@ -3,7 +3,7 @@ import { CgDirectory } from '../cg-directory';
 import chalk from 'chalk';
 import { runCheck } from '../check/check-runner';
 import { resolveScopeFiles } from '../check/scope';
-import type { CheckScope } from '../check/types';
+import type { CheckScope, CheckResult } from '../check/types';
 import { resolveActiveSession } from '../auth/auth-session';
 import { recordAuditEventIfTeam } from '../team/audit';
 import {
@@ -23,24 +23,47 @@ export interface CheckCommandOptions {
   skipStructural?: boolean;
   skipCompiler?: boolean;
   strict?: boolean;
-  // --ci: post result to server so GitHub commit status gets updated,
-  //       and exit 1 strictly on any issue (no interactive prompts)
   ci?: boolean;
   json?: boolean;
 }
 
+function makeLogger(json: boolean) {
+  return {
+    log: (msg: string) => { if (!json) console.log(msg); },
+    error: (msg: string, error_code?: string) => { 
+      if (!json) {
+        console.error(msg, error_code)
+      }; 
+    },
+    warn: (msg: string) => { if (!json) console.warn(msg); },
+  };
+}
+
+function exitJson(json: boolean, error: string, code: string): never {
+  if (json) {
+    console.log(JSON.stringify({ error, code }));
+  } else {
+    console.error(chalk.red(`\n✗ ${error}`));
+  }
+  process.exit(1);
+}
+
+
 export async function checkCommand(
   projectPath?: string,
   options: CheckCommandOptions = {},
-): Promise<void> {
+): Promise<CheckResult> {
+  const out = makeLogger(!!options.json);
+  const json = !!options.json;
+
   const rootPath = resolve(projectPath || process.cwd());
   const scope = options.scope ?? 'all';
   const isCi = options.ci ?? false;
 
-  console.log(chalk.blue('✓ Running cxgrd check...'));
-  if (scope !== 'all') console.log(chalk.gray(`   Scope: ${scope} files only`));
-  if (options.strict) console.log(chalk.gray('   Mode: strict (skipped compilers fail the check)'));
-  if (isCi) console.log(chalk.gray('   Mode: CI (results posted to server for PR status)'));
+  out.log(chalk.blue('✓ Running cxgrd check...'));
+  if (scope !== 'all') out.log(chalk.gray(`   Scope: ${scope} files only`));
+  if (options.strict) out.log(chalk.gray('   Mode: strict (skipped compilers fail the check)'));
+  if (isCi) out.log(chalk.gray('   Mode: CI (results posted to server for PR status)'));
 
   try {
     const session = await resolveActiveSession();
@@ -48,16 +71,13 @@ export async function checkCommand(
     // --ci requires team plan so we can post the result back
     if (isCi) {
       if (!session) {
-        console.error(chalk.red('\n✗ --ci requires authentication. Run: cxgrd auth login'));
-        process.exit(1);
+        exitJson(json, '--ci requires authentication. Run: cxgrd auth login', 'NOT_AUTHENTICATED');
       }
       if (session.plan !== 'team') {
-        console.error(chalk.red('\n✗ --ci requires a Team plan. Upgrade at https://cxgrd.com/pricing'));
-        process.exit(1);
+        exitJson(json, '--ci requires a Team plan. Upgrade at https://cxgrd.com/pricing', 'PLAN_REQUIRED');
       }
       if (!session.orgId) {
-        console.error(chalk.red('\n✗ --ci: no team found on your account. Ask your team owner to invite you.'));
-        process.exit(1);
+        exitJson(json, '--ci: no team found on your account. Ask your team owner to invite you.', 'NO_TEAM');
       }
     }
 
@@ -66,8 +86,7 @@ export async function checkCommand(
         await checkFreeAuditLimit();
       } catch (err) {
         if (err instanceof AuditUsageExceededError) {
-          console.error(chalk.red(`\n✗ ${err.message}`));
-          process.exit(1);
+          exitJson(json, err.message, 'AUDIT_LIMIT_EXCEEDED');
         }
         throw err;
       }
@@ -80,19 +99,17 @@ export async function checkCommand(
 
     const err_code = 'NO_GRAPH';
     if (!graph) {
-      console.error(chalk.red('✗ No dependency graph found. Run "cxgrd scan" first.'), err_code);
-      process.exit(1);
+      exitJson(json, '✗ No dependency graph found. Run "cxgrd scan" first.', err_code);
     }
 
     const scopeFiles = scope === 'all' ? null : resolveScopeFiles(rootPath, scope);
     if (scopeFiles && scopeFiles.size === 0) {
-      console.log(chalk.yellow('   No files in scope — skipping checks.'));
-      return;
+      exitJson(json, '   No files in scope — skipping checks.', 'NO_FILES_IN_SCOPE');
     }
 
-    console.log(chalk.gray('   Structural analysis...'));
+    out.log(chalk.gray('   Structural analysis...'));
     if (!options.skipCompiler) {
-      console.log(chalk.gray('   Compiler verification (TypeScript, Python, Rust)...'));
+      out.log(chalk.gray('   Compiler verification (TypeScript, Python, Rust)...'));
     }
 
     const result = await runCheck(graph, arch, {
@@ -106,28 +123,28 @@ export async function checkCommand(
     printCompilerSummary(result.compilerSummary);
 
     if (!options.strict && result.skippedLanguages.length > 0) {
-      console.log(chalk.yellow(`   ⚠ Skipped compiler(s) for: ${result.skippedLanguages.join(', ')} — not counted as failures.`));
-      console.log(chalk.yellow('     Use --strict or run `cxgrd doctor` to fix your toolchain.'));
+      out.log(chalk.yellow(`   ⚠ Skipped compiler(s) for: ${result.skippedLanguages.join(', ')} — not counted as failures.`));
+      out.log(chalk.yellow('     Use --strict or run `cxgrd doctor` to fix your toolchain.'));
     }
 
     if (result.passed) {
-      console.log(chalk.green('✓ All checks passed!'));
-      console.log(chalk.gray(`   ${result.summary}`));
+      out.log(chalk.green('✓ All checks passed!'));
+      out.log(chalk.gray(`   ${result.summary}`));
     } else {
-      console.log(chalk.red('✗ Issues found:'));
+      out.log(chalk.red('✗ Issues found:'));
       for (const issue of result.issues) {
         const color =
           issue.severity === 'error'   ? chalk.red :
           issue.severity === 'warning' ? chalk.yellow : chalk.blue;
         const tag = issue.source === 'compiler' ? 'compiler' : 'structural';
-        console.log(color(`   [${issue.severity.toUpperCase()}][${tag}] ${issue.message}`));
+        out.log(color(`   [${issue.severity.toUpperCase()}][${tag}] ${issue.message}`));
         if (issue.file) {
           const loc  = issue.line ? `:${issue.line}` : '';
           const code = issue.code ? ` (${issue.code})` : '';
-          console.log(chalk.gray(`          at ${issue.file}${loc}${code}`));
+          out.log(chalk.gray(`          at ${issue.file}${loc}${code}`));
         }
       }
-      console.log(chalk.gray(`   ${result.summary}`));
+      out.log(chalk.gray(`   ${result.summary}`));
     }
 
     if (!session || session.plan === 'free') {
@@ -190,7 +207,7 @@ export async function checkCommand(
         errorCount:    result.issues.filter(i => i.severity === 'error').length,
         summary:       result.summary,
       }).catch(err => {
-        console.warn(chalk.yellow(`   ⚠ Could not post CI result to server: ${err.message}`));
+        out.warn(chalk.yellow(`   ⚠ Could not post CI result to server: ${err.message}`));
       });
     }
 
@@ -199,13 +216,16 @@ export async function checkCommand(
     // In CI mode, exit 1 on any failure — no exceptions
     if (!result.passed) {
       if (isCi) {
-        console.error(chalk.red('\n✗ CI check failed — blocking merge.'));
+        out.error(chalk.red('\n✗ CI check failed — blocking merge.'));
       }
       process.exit(1);
     }
+
+    return result;
+    
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(chalk.red(`✗ Error: ${message}`));
+    out.error(chalk.red(`✗ Error: ${message}`));
     process.exit(1);
   }
 }
@@ -220,17 +240,19 @@ function printCompilerSummary(
     warningCount: number;
     skipped: boolean;
     skipReason?: string;
-  }>,
+  }>, options: CheckCommandOptions = {}
 ): void {
+  const out = makeLogger(!!options.json);
+
   if (summaries.length === 0) return;
-  console.log(chalk.gray('   Compiler runs:'));
+  out.log(chalk.gray('   Compiler runs:'));
   for (const s of summaries) {
     if (s.skipped) {
-      console.log(chalk.gray(`     · ${s.language} (${s.tool} @ ${s.projectRoot}): skipped — ${s.skipReason}`));
+      out.log(chalk.gray(`     · ${s.language} (${s.tool} @ ${s.projectRoot}): skipped — ${s.skipReason}`));
       continue;
     }
     const status = s.passed ? chalk.green('ok') : chalk.red('failed');
-    console.log(
+    out.log(
       chalk.gray(`     · ${s.language} (${s.tool} @ ${s.projectRoot}): `) +
       status +
       chalk.gray(` — ${s.errorCount} errors, ${s.warningCount} warnings`),
