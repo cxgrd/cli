@@ -5,7 +5,7 @@ interface Dependency {
   line: number;
 }
 
-interface FileNode {
+export interface FileNode {
   path: string;
   language: string;
   dependencies: Dependency[];

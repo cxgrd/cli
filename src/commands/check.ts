@@ -26,6 +26,7 @@ export interface CheckCommandOptions {
   // --ci: post result to server so GitHub commit status gets updated,
   //       and exit 1 strictly on any issue (no interactive prompts)
   ci?: boolean;
+  json?: boolean;
 }
 
 export async function checkCommand(
@@ -77,8 +78,9 @@ export async function checkCommand(
     const arch  = await cgDir.readArch();
     const history = await cgDir.readHistory();
 
+    const err_code = 'NO_GRAPH';
     if (!graph) {
-      console.error(chalk.red('✗ No dependency graph found. Run "cxgrd scan" first.'));
+      console.error(chalk.red('✗ No dependency graph found. Run "cxgrd scan" first.'), err_code);
       process.exit(1);
     }
 

@@ -27,10 +27,12 @@ async function main() {
           y
             .positional('path', { describe: 'Project path (default: current directory)', type: 'string' })
             .option('sync', { describe: 'Push graph to cloud after scan', type: 'boolean', default: false })
-            .option('team', { describe: 'Require team session and push to shared team graph (Team plan)', type: 'boolean', default: false }),
+            .option('pull', { describe: 'Pull graph from cloud (Pro/Team plan)', type: 'boolean', default: false})
+            .option('team', { describe: 'Require team session and push to shared team graph (Team plan)', type: 'boolean', default: false })
+            .option('json', { describe: 'Output results in JSON format', type: 'boolean', default: false }),
         async (argv: any) => {
-          trackEvent('cli_scan', { team: !!argv.team, sync: !!argv.sync });
-          await scanCommand(argv.path as string, { sync: argv.sync, team: argv.team });
+          trackEvent('cli_scan', { team: !!argv.team, sync: !!argv.sync, pull: !!argv.pull});
+          await scanCommand(argv.path as string, { sync: argv.sync, pull: argv.pull, team: argv.team, json: argv.json });
         },
       )
       .command(
@@ -69,7 +71,8 @@ async function main() {
             .option('skip-compiler',   { describe: 'Skip compiler-backed verification', type: 'boolean', default: false })
             .option('skip-structural', { describe: 'Skip structural graph checks', type: 'boolean', default: false })
             .option('strict',          { describe: 'Fail if a detected language compiler was skipped', type: 'boolean', default: false })
-            .option('ci',              { describe: 'CI mode: post result to server for GitHub PR status (Team plan)', type: 'boolean', default: false }),
+            .option('ci',              { describe: 'CI mode: post result to server for GitHub PR status (Team plan)', type: 'boolean', default: false })
+            .option('json', { describe: 'Output results in JSON format', type: 'boolean', default: false }),
         async (argv: any) => {
           const scope = argv.staged ? 'staged' : argv.changed ? 'changed' : 'all';
           trackEvent('cli_check', { scope, strict: !!argv.strict, ci: !!argv.ci });
@@ -79,6 +82,7 @@ async function main() {
             skipStructural: argv.skipStructural,
             strict:         argv.strict,
             ci:             argv.ci,
+            json:           argv.json,
           });
         },
       )
@@ -151,7 +155,7 @@ async function main() {
             .option('debounce',  { type: 'number', default: 500 }),
         async (argv: any) => { trackEvent('cli_watch'); await watchCommand(argv.path as string, { debounce: argv.debounce }); },
       )
-      .version('0.1.38')
+      .version('0.1.39')
       .help()
       .alias('h', 'help')
       .epilogue(chalk.gray('For more information, visit: https://cxgrd.com'))

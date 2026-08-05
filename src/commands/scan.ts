@@ -8,7 +8,7 @@ import type { CgPatternsFile } from '../memory/types';
 import { appendMemorySession } from '../memory/repo-memory';
 import { resolveActiveSession } from '../auth/auth-session';
 import { planIncludesFeature } from '../auth/plans';
-import { syncPush } from '../team/graph-sync';
+import { syncPush, syncPull } from '../team/graph-sync';
 import {
   checkFreeAuditLimit,
   incrementAuditCount,
@@ -17,40 +17,109 @@ import {
 } from '../auth/audit-usage';
 import { postAuditEvent, postHealthSnapshot } from '../team/cloud-client';
 import {resolveRepoFullName, resolveGitSha} from '../utils/git';
-import type { ActiveSession } from '../auth/auth-session';
+
+function makeLogger(json: boolean) {
+  return {
+    log: (msg: string) => { if (!json) console.log(msg); },
+    error: (msg: string) => { if (!json) console.error(msg); },
+  };
+}
+
+function exitJson(json: boolean, error: string, code: string): never {
+  if (json) {
+    console.log(JSON.stringify({ error, code }));
+  } else {
+    console.error(chalk.red(`\n✗ ${error}`));
+  }
+  process.exit(1);
+}
 
 export interface ScanCommandOptions {
   sync?: boolean;
   team?: boolean;
+  pull?: boolean;
+  json?: boolean;
+}
+
+export interface ScanResult {
+  status: string;
+  error?: [];
+  filesScanned?: number;
+  graphNodes: number;
+  totalDependencies: number;
+  languages : {};
+  filesAdded: number;
+  filesRemoved: number;
+  dependencyChanges: number;
+  errors : [];
 }
 
 export async function scanCommand(
   projectPath?: string,
   options: ScanCommandOptions = {},
-): Promise<void> {
+  opts: { json?: boolean } = {}
+): Promise<ScanResult | undefined> {
+  const out = makeLogger(!!opts.json);
+  const json = !!opts.json;
   const rootPath = resolve(projectPath || process.cwd());
 
-  console.log(chalk.blue('🔍 Scanning project...'));
-  console.log(chalk.gray(`   Path: ${rootPath}`));
+  out.log(chalk.blue('🔍 Scanning project...'));
+  out.log(chalk.gray(`   Path: ${rootPath}`));
 
   try {
     const session = await resolveActiveSession();
 
+    const cgDir = new CgDirectory(rootPath);
+    const previousGraph = await cgDir.readGraph();
+    const previousPatterns = await cgDir.readPatterns();
+
+
+    // ── Pull from cloud (Pro/Team) ──────────────────────────────────────────────
+    if (options.pull) {
+      if (!session) {
+        exitJson(json, 'Not authenticated. Run: cxgrd auth login', 'NOT_AUTHENTICATED');
+      }
+      if (!planIncludesFeature(session.plan, 'team_cloud')) {
+        exitJson(json, '--pull requires a Team plan. Visit https://cxgrd.com/pricing', 'PLAN_REQUIRED');
+      }
+
+      out.log(chalk.blue('⬇ Pulling team graph from cloud...'));
+      const bundle = await syncPull(cgDir, rootPath, session);
+      if (!bundle) {
+        exitJson(json, 'No graph found in cloud for this repo. Run cxgrd scan --sync first.', 'NO_CLOUD_GRAPH');
+      }
+
+      out.log(chalk.green(`✓ Graph pulled from cloud`));
+      out.log(chalk.gray(`   Uploaded by: ${bundle.uploadedBy ?? 'unknown'}`));
+      out.log(chalk.gray(`   Ref: ${bundle.gitRef ?? 'unknown'}`));
+
+      if (json) {
+        out.log(JSON.stringify({
+          status: 'success',
+          source: 'cloud',
+          uploadedBy: bundle.uploadedBy ?? null,
+          gitRef: bundle.gitRef ?? null,
+        }));
+      }
+      return;
+    }
+
+
     // ── Team flag validation ──────────────────────────────────────────────────
     if (options.team) {
       if (!session) {
-        console.error(chalk.red('\n✗ Not authenticated. Run: cxgrd auth login'));
+        out.error(chalk.red('\n✗ Not authenticated. Run: cxgrd auth login'));
         process.exit(1);
       }
       if (session.plan !== 'team') {
-        console.error(chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/pricing'));
+        out.error(chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/pricing'));
         process.exit(1);
       }
       if (!session.orgId) {
-        console.error(chalk.red('\n✗ No team associated with your account. Ask your team owner to invite you.'));
+        out.error(chalk.red('\n✗ No team associated with your account. Ask your team owner to invite you.'));
         process.exit(1);
       }
-      console.log(chalk.gray(`   Team: ${session.orgName ?? session.orgId} (${session.role})`));
+      out.log(chalk.gray(`   Team: ${session.orgName ?? session.orgId} (${session.role})`));
     }
 
     // ── Free tier audit limit ─────────────────────────────────────────────────
@@ -59,27 +128,23 @@ export async function scanCommand(
         await checkFreeAuditLimit();
       } catch (err) {
         if (err instanceof AuditUsageExceededError) {
-          console.error(chalk.red(`\n✗ ${err.message}`));
+          out.error(chalk.red(`\n✗ ${err.message}`));
           process.exit(1);
         }
         throw err;
       }
     }
 
-    const cgDir = new CgDirectory(rootPath);
-    const previousGraph = await cgDir.readGraph();
-    const previousPatterns = await cgDir.readPatterns();
-
     const scanner = new FileScanner();
     const files = await scanner.scanDirectory(rootPath);
-    console.log(chalk.green(`✓ Found ${files.length} source files`));
+    out.log(chalk.green(`✓ Found ${files.length} source files`));
 
     const builder = new DependencyGraphBuilder();
     const graph = builder.buildGraph(files);
 
-    console.log(chalk.blue('📊 Building dependency graph...'));
-    console.log(chalk.gray(`   Total dependencies: ${graph.stats.totalDependencies}`));
-    console.log(
+    out.log(chalk.blue('📊 Building dependency graph...'));
+    out.log(chalk.gray(`   Total dependencies: ${graph.stats.totalDependencies}`));
+    out.log(
       chalk.gray(
         `   Languages: ${Object.entries(graph.stats.languages)
           .map(([lang, count]) => `${lang}(${count})`)
@@ -114,11 +179,11 @@ export async function scanCommand(
     await cgDir.writeMeta(meta);
 
     if (graphDiff.filesAdded.length || graphDiff.filesRemoved.length || graphDiff.dependencyChanges) {
-      console.log(chalk.gray('   Graph diff:'));
-      if (graphDiff.filesAdded.length) console.log(chalk.gray(`     + ${graphDiff.filesAdded.length} new file(s)`));
-      if (graphDiff.filesRemoved.length) console.log(chalk.gray(`     - ${graphDiff.filesRemoved.length} removed file(s)`));
-      if (graphDiff.dependencyChanges) console.log(chalk.gray(`     ~ ${graphDiff.dependencyChanges} dependency change(s)`));
-      console.log(chalk.gray(`     Patterns updated (${patterns.importHubs.length} hubs)`));
+      out.log(chalk.gray('   Graph diff:'));
+      if (graphDiff.filesAdded.length) out.log(chalk.gray(`     + ${graphDiff.filesAdded.length} new file(s)`));
+      if (graphDiff.filesRemoved.length) out.log(chalk.gray(`     - ${graphDiff.filesRemoved.length} removed file(s)`));
+      if (graphDiff.dependencyChanges) out.log(chalk.gray(`     ~ ${graphDiff.dependencyChanges} dependency change(s)`));
+      out.log(chalk.gray(`     Patterns updated (${patterns.importHubs.length} hubs)`));
     }
 
     await appendMemorySession(cgDir, {
@@ -127,8 +192,9 @@ export async function scanCommand(
       metadata: { graphDiff },
     });
 
-    console.log(chalk.green('✓ Scan complete!'));
-    console.log(chalk.green('✓ Updated .cg/ (graph, symbols, arch, patterns, memory)'));
+    out.log(chalk.green('✓ Scan complete!'));
+    out.log(chalk.green('✓ Updated .cg/ (graph, symbols, arch, patterns, memory)'));
+    const status = "success";
 
     if (!session || session.plan === 'free') {
       await incrementAuditCount();
@@ -145,17 +211,17 @@ export async function scanCommand(
       try {
         await syncPush(cgDir, rootPath, session);
         if (options.team) {
-          console.log(chalk.green(`✓ Shared graph updated (team: ${session.orgName ?? session.orgId})`));
+          out.log(chalk.green(`✓ Shared graph updated (team: ${session.orgName ?? session.orgId})`));
         } else {
-          console.log(chalk.green('✓ Synced graph to cloud'));
+          out.log(chalk.green('✓ Synced graph to cloud'));
         }
       } catch (syncErr: unknown) {
         const msg = syncErr instanceof Error ? syncErr.message : String(syncErr);
         if (options.team) {
-          console.error(chalk.red(`✗ Team sync failed: ${msg}`));
+          out.error(chalk.red(`✗ Team sync failed: ${msg}`));
           process.exit(1);
         }
-        console.log(chalk.yellow(`   Sync skipped: ${msg}`));
+        out.log(chalk.yellow(`   Sync skipped: ${msg}`));
       }
     }
 
@@ -187,9 +253,24 @@ export async function scanCommand(
         },
       }).catch(() => {});
     }
+
+    const scanres: ScanResult = {
+      status : status,
+      filesScanned: files.length,
+      graphNodes: Object.keys(graph.files ?? {}).length,
+      totalDependencies: graph.stats.totalDependencies,
+      languages: graph.stats.languages,
+      filesAdded: graphDiff.filesAdded.length,
+      filesRemoved: graphDiff.filesRemoved.length,
+      dependencyChanges: graphDiff.dependencyChanges,
+      errors: [],
+    };
+
+    return scanres;
+
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(chalk.red(`✗ Error: ${message}`));
+    out.error(chalk.red(`✗ Error: ${message}`));
     process.exit(1);
   }
 }

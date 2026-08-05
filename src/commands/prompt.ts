@@ -26,8 +26,9 @@ export async function promptCommand(changeDescription: string, projectPath?: str
     const symbols = await cgDir.readSymbols();
     const patterns = await cgDir.readPatterns();
 
+    const err_code = 'NO_GRAPH';
     if (!graph) {
-      console.error(chalk.red('✗ No dependency graph found. Run "cxgrd scan" first.'));
+      console.error(chalk.red('✗ No dependency graph found. Run "cxgrd scan" first.'), err_code);
       process.exit(1);
     }
 
