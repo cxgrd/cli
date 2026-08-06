@@ -97,11 +97,9 @@ export function trackEvent(event: string, props: Record<string, unknown> = {}): 
       },
       timeout: 3000,
     });
-    req.on('error', (e) => console.error('telemetry error:', e));
     req.on('timeout', () => req.destroy());
+    req.on('error', () => {});
     req.write(body);
     req.end();
-  } catch (e) {
-    console.error('telemetry error:', e);
-  }
+  } catch (e) {return; }
 }

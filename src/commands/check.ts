@@ -120,7 +120,7 @@ export async function checkCommand(
       strict:         options.strict         ?? false,
     });
 
-    printCompilerSummary(result.compilerSummary);
+    printCompilerSummary(result.compilerSummary, { json: options.json });
 
     if (!options.strict && result.skippedLanguages.length > 0) {
       out.log(chalk.yellow(`   ⚠ Skipped compiler(s) for: ${result.skippedLanguages.join(', ')} — not counted as failures.`));
@@ -219,6 +219,10 @@ export async function checkCommand(
         out.error(chalk.red('\n✗ CI check failed — blocking merge.'));
       }
       process.exit(1);
+    }
+
+    if (json) {
+      console.log(JSON.stringify(result));
     }
 
     return result;

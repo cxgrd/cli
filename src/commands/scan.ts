@@ -93,7 +93,7 @@ export async function scanCommand(
       out.log(chalk.gray(`   Ref: ${bundle.gitRef ?? 'unknown'}`));
 
       if (json) {
-        out.log(JSON.stringify({
+        console.log(JSON.stringify({
           status: 'success',
           source: 'cloud',
           uploadedBy: bundle.uploadedBy ?? null,
@@ -141,7 +141,7 @@ export async function scanCommand(
     const builder = new DependencyGraphBuilder();
     const graph = builder.buildGraph(files);
 
-    out.log(chalk.blue('📊 Building dependency graph...'));
+    out.log(chalk.blue('Building dependency graph...'));
     out.log(chalk.gray(`   Total dependencies: ${graph.stats.totalDependencies}`));
     out.log(
       chalk.gray(
@@ -264,6 +264,10 @@ export async function scanCommand(
       dependencyChanges: graphDiff.dependencyChanges,
       errors: [],
     };
+
+    if (json) {
+      console.log(JSON.stringify(scanres));
+    }
 
     return scanres;
 

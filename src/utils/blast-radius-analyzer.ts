@@ -332,25 +332,25 @@ export class BlastRadiusAnalyzer {
 
     const criticalFiles = files.filter(f => f.severity === 'critical');
     if (criticalFiles.length > 0) {
-      recs.push(`⚠️  ${criticalFiles.length} critical file(s) impacted — review carefully`);
+      recs.push(` ${criticalFiles.length} critical file(s) impacted — review carefully`);
     }
 
     for (const c of changeTypes) {
-      if (c.type === 'schema') recs.push('📊 Schema change: update database migrations and models');
-      else if (c.type === 'export') recs.push('📤 Export/rename change: update all import sites in affected files');
-      else if (c.type === 'config') recs.push('⚙️  Config change: verify environment variables across deployments');
-      else if (c.type === 'type') recs.push('🔷 Type change: check all usages for type compatibility');
+      if (c.type === 'schema') recs.push('Schema change: update database migrations and models');
+      else if (c.type === 'export') recs.push(' Export/rename change: update all import sites in affected files');
+      else if (c.type === 'config') recs.push('  Config change: verify environment variables across deployments');
+      else if (c.type === 'type') recs.push(' Type change: check all usages for type compatibility');
     }
 
     if (riskLevel === 'critical' || riskLevel === 'high') {
-      recs.push('🚨 Write additional tests for affected modules');
-      recs.push('🔍 Run full test suite before deploying');
+      recs.push(' Write additional tests for affected modules');
+      recs.push(' Run full test suite before deploying');
     } else if (riskLevel === 'medium') {
       recs.push('✓ Run tests for directly affected modules');
     }
 
     if (files.length > 15) {
-      recs.push(`💡 Large blast radius (${files.length} files) — consider smaller PRs`);
+      recs.push(` Large blast radius (${files.length} files) — consider smaller PRs`);
     }
 
     if (recs.length === 0) recs.push('✓ Low risk change. Proceed with caution.');

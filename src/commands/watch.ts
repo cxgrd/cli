@@ -67,7 +67,7 @@ export async function watchCommand(projectPath?: string, options?: WatchOptions)
 
     // Setup keyboard handler
     ui.setupKeyboardHandler(async () => {
-      console.log('\n\n🛑 Stopping watch mode...');
+      console.log('\n\n Stopping watch mode...');
       await watcher.stop();
       ui.displayShutdown();
       process.exit(0);

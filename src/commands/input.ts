@@ -159,6 +159,10 @@ export async function inputCommand(
       summary: description.slice(0, 200),
     });
 
+    if (json) {
+      console.log(JSON.stringify(result));
+    }
+
     return result;
 
   } catch (err: any) {

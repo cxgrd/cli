@@ -13,7 +13,7 @@ export async function promptCommand(changeDescription: string, projectPath?: str
   await loadCxgrdEnv();
   const rootPath = resolve(projectPath || process.cwd());
 
-  console.log(chalk.blue('🔄 Generating AI prompt (Pro)...'));
+  console.log(chalk.blue('Generating AI prompt (Pro)...'));
   console.log(chalk.gray(`   Input: ${changeDescription}`));
 
   try {
