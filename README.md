@@ -1,7 +1,7 @@
 # CXGRD CLI
 
 > Make AI-assisted code changes without breaking your codebase.
-> **[cxgrd.com](https://cxgrd.com)**
+> **[cxgrd.com](https://www.cxgrd.com)**
 
 ---
 
@@ -177,4 +177,4 @@ npm run dev -- prompt "describe your feature"
 
 ---
 
-**Learn more at [cxgrd.com](https://cxgrd.com)**
+**Learn more at [cxgrd.com](https://www.cxgrd.com)**

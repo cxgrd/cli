@@ -11,7 +11,7 @@ import { openBrowser } from '../auth/open-browser';
 import { printSessionStatus } from '../auth/entitlements';
 
 async function initiateSession(sessionId: string): Promise<void> {
-  const baseUrl = envString('CXGRD_AUTH_BASE_URL', 'https://cxgrd.com').replace(/\/$/, '');
+  const baseUrl = envString('CXGRD_AUTH_BASE_URL', 'https://www.cxgrd.com').replace(/\/$/, '');
   const url = `${baseUrl}/api/auth/cli/initiate`;
 
   const response = await fetch(url, {

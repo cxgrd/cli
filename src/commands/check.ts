@@ -74,7 +74,7 @@ export async function checkCommand(
         exitJson(json, '--ci requires authentication. Run: cxgrd auth login', 'NOT_AUTHENTICATED');
       }
       if (session.plan !== 'team') {
-        exitJson(json, '--ci requires a Team plan. Upgrade at https://cxgrd.com/pricing', 'PLAN_REQUIRED');
+        exitJson(json, '--ci requires a Team plan. Upgrade at https://www.cxgrd.com/pricing', 'PLAN_REQUIRED');
       }
       if (!session.orgId) {
         exitJson(json, '--ci: no team found on your account. Ask your team owner to invite you.', 'NO_TEAM');

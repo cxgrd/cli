@@ -79,7 +79,7 @@ export async function scanCommand(
         exitJson(json, 'Not authenticated. Run: cxgrd auth login', 'NOT_AUTHENTICATED');
       }
       if (!planIncludesFeature(session.plan, 'team_cloud')) {
-        exitJson(json, '--pull requires a Team plan. Visit https://cxgrd.com/pricing', 'PLAN_REQUIRED');
+        exitJson(json, '--pull requires a Team plan. Visit https://www.cxgrd.com/pricing', 'PLAN_REQUIRED');
       }
 
       out.log(chalk.blue('⬇ Pulling team graph from cloud...'));
@@ -111,7 +111,7 @@ export async function scanCommand(
         process.exit(1);
       }
       if (session.plan !== 'team') {
-        out.error(chalk.red('\n✗ --team requires a Team plan. Upgrade at https://cxgrd.com/pricing'));
+        out.error(chalk.red('\n✗ --team requires a Team plan. Upgrade at https://www.cxgrd.com/pricing'));
         process.exit(1);
       }
       if (!session.orgId) {

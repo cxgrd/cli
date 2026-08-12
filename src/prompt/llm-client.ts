@@ -24,7 +24,7 @@ export async function generatePromptWithLlm(
   session: ActiveSession,
 ): Promise<LlmResult> {
   const apiKey = envString('CXGRD_LLM_API_KEY');
-  const cloudUrl = envString('CXGRD_PROMPT_API_URL', 'https://cxgrd.com/api/prompt');
+  const cloudUrl = envString('CXGRD_PROMPT_API_URL', 'https://www.cxgrd.com/api/prompt');
 
   if (session.source === 'auth_file') {
     try {
@@ -72,7 +72,7 @@ async function callCloudPromptApi(
 
   if (response.status === 403) {
     throw new Error(
-      'This feature requires a Pro plan. Visit https://cxgrd.com/pricing to upgrade.',
+      'This feature requires a Pro plan. Visit https://www.cxgrd.com/pricing to upgrade.',
     );
   }
 

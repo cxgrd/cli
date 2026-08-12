@@ -89,7 +89,7 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
 }
 
 export async function pollAuthSession(sessionId: string): Promise<StoredAuth> {
-  const baseUrl = envString('CXGRD_AUTH_BASE_URL', 'https://cxgrd.com').replace(/\/$/, '');
+  const baseUrl = envString('CXGRD_AUTH_BASE_URL', 'https://www.cxgrd.com').replace(/\/$/, '');
   const url     = `${baseUrl}/api/auth/cli/session/${sessionId}`;
   const started = Date.now();
 
@@ -155,7 +155,7 @@ export function createCliSessionId(): string {
 }
 
 export function buildCliAuthUrl(sessionId: string): string {
-  const baseUrl = envString('CXGRD_AUTH_BASE_URL', 'https://cxgrd.com').replace(/\/$/, '');
+  const baseUrl = envString('CXGRD_AUTH_BASE_URL', 'https://www.cxgrd.com').replace(/\/$/, '');
   return `${baseUrl}/auth/cli?session=${encodeURIComponent(sessionId)}`;
 }
 

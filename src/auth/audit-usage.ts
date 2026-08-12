@@ -17,7 +17,7 @@ export class AuditUsageExceededError extends Error {
   ) {
     super(
       `Monthly audit limit exceeded. Used: ${used}/${limit}\n` +
-        `  Upgrade to Pro for unlimited audits at https://cxgrd.com/pricing`,
+        `  Upgrade to Pro for unlimited audits at https://www.cxgrd.com/pricing`,
     );
     this.name = 'AuditUsageExceededError';
   }

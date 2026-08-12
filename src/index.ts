@@ -155,10 +155,10 @@ async function main() {
             .option('debounce',  { type: 'number', default: 500 }),
         async (argv: any) => { trackEvent('cli_watch'); await watchCommand(argv.path as string, { debounce: argv.debounce }); },
       )
-      .version('0.1.40')
+      .version('0.1.41')
       .help()
       .alias('h', 'help')
-      .epilogue(chalk.gray('For more information, visit: https://cxgrd.com'))
+      .epilogue(chalk.gray('For more information, visit: https://www.cxgrd.com'))
       .demandCommand(1, chalk.red('You must provide a command'))
       .strict()
       .parseAsync();
