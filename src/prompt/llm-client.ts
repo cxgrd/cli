@@ -95,7 +95,7 @@ async function callCloudPromptApi(
 
 async function callDirectLlm(context: string, apiKey: string): Promise<LlmResult> {
   const provider = envString('CXGRD_LLM_PROVIDER', 'groq').toLowerCase();
-  const model = envString('CXGRD_LLM_MODEL', 'llama-3.3-70b-versatile');
+  const model = envString('CXGRD_LLM_MODEL', 'gpt-oss-120b');
 
   const baseUrl =
     envString('CXGRD_LLM_BASE_URL') ||
