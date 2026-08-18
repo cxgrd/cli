@@ -115,15 +115,19 @@ export async function checkFreeAuditLimit(): Promise<void> {
 /**
  * Print current usage status to console
  */
-export async function printAuditUsageStatus(): Promise<void> {
+export async function printAuditUsageStatus(json : boolean): Promise<void> {
   const count = await getCurrentMonthAuditCount();
   const percent = Math.round((count / FREE_MONTHLY_AUDIT_LIMIT) * 100);
 
-  console.log(
-    chalk.gray(
-      `   Audits this month: ${count}/${FREE_MONTHLY_AUDIT_LIMIT} (${percent}%)`,
-    ),
-  );
+  if (!json){
+    console.log(
+      chalk.gray(
+        `   Audits this month: ${count}/${FREE_MONTHLY_AUDIT_LIMIT} (${percent}%)`,
+      ),
+    );
+  }
+
+  console.log(JSON.stringify({ auditsThisMonth: count, monthlyLimit: FREE_MONTHLY_AUDIT_LIMIT, percentUsed: percent }));
 
   if (count >= FREE_MONTHLY_AUDIT_LIMIT - 5) {
     console.log(
