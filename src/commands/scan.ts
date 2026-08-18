@@ -197,7 +197,7 @@ export async function scanCommand(
 
     if (!session || session.plan === 'free') {
       await incrementAuditCount();
-      await printAuditUsageStatus();
+      await printAuditUsageStatus(json);
     }
 
     // ── Sync + team telemetry ─────────────────────────────────────────────────
