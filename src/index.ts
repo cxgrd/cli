@@ -78,19 +78,19 @@ async function main() {
           trackEvent('cli_check', { scope, strict: !!argv.strict, ci: !!argv.ci });
           await checkCommand(argv.path as string, {
             scope,
-            skipCompiler:   argv.skipCompiler,
+            skipCompiler: argv.skipCompiler,
             skipStructural: argv.skipStructural,
-            strict:         argv.strict,
-            ci:             argv.ci,
-            json:           argv.json,
+            strict: argv.strict,
+            ci: argv.ci,
+            json: argv.json,
           });
         },
       )
       .command('auth', 'Sign in for Pro features (prompt, repo memory)', (y: any) =>
         y
           .command('login',  'Open browser to sign in with GitHub', {}, async () => { trackEvent('cli_auth_login');  await authLoginCommand(); })
-          .command('logout', 'Remove stored credentials',           {}, async () => { trackEvent('cli_auth_logout'); await authLogoutCommand(); })
-          .command('status', 'Show current plan and auth state',    {}, async () => { await authStatusCommand(); })
+          .command('logout', 'Remove stored credentials', {}, async () => { trackEvent('cli_auth_logout'); await authLogoutCommand(); })
+          .command('status', 'Show current plan and auth state', {}, async () => { await authStatusCommand(); })
           .demandCommand(1, 'Specify auth login, logout, or status')
           .help(),
       )
@@ -151,8 +151,8 @@ async function main() {
         'Monitor project for real-time architecture analysis',
         (y: any) =>
           y
-            .positional('path',  { describe: 'Project path (default: current directory)', type: 'string' })
-            .option('debounce',  { type: 'number', default: 500 }),
+            .positional('path', { describe: 'Project path (default: current directory)', type: 'string' })
+            .option('debounce', { type: 'number', default: 500 }),
         async (argv: any) => { trackEvent('cli_watch'); await watchCommand(argv.path as string, { debounce: argv.debounce }); },
       )
       .version('0.1.43')
