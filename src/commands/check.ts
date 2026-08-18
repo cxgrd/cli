@@ -149,7 +149,7 @@ export async function checkCommand(
 
     if (!session || session.plan === 'free') {
       await incrementAuditCount();
-      await printAuditUsageStatus();
+      await printAuditUsageStatus(json);
     }
 
     const historyEntry = {
