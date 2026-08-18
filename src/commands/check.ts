@@ -223,8 +223,9 @@ export async function checkCommand(
     if (isCi) {
       if (!result.passed) {
         out.error(chalk.red('\n✗ CI check failed — blocking merge.'));
+        process.exit(1);
       }
-      process.exit(1);
+      process.exit(0);
     }
 
     return result;
