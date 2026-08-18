@@ -17,7 +17,7 @@ jobs:
           path: .cg/
           key: cxgrd-graph-${{ hashFiles('package-lock.json') }}
 
-      - run: npm run build
+      - run: npm install cxgrd@latest
 
       - run: cxgrd scan
 
