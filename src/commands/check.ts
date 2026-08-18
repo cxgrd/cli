@@ -220,8 +220,8 @@ export async function checkCommand(
     }
 
     // In CI mode, exit 1 on any failure — no exceptions
-    if (!result.passed) {
-      if (isCi) {
+    if (isCi) {
+      if (!result.passed) {
         out.error(chalk.red('\n✗ CI check failed — blocking merge.'));
       }
       process.exit(1);
