@@ -231,8 +231,7 @@ export async function checkCommand(
     
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    out.error(chalk.red(`✗ Error: ${message}`));
-    process.exit(1);
+    exitJson(json, `Error running check: ${message}`, 'CHECK_FAILED');
   }
 }
 
