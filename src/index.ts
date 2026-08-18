@@ -129,20 +129,20 @@ async function main() {
         'Set up pre-commit hooks for architecture checks',
         (y: any) =>
           y
-            .positional('path',           { describe: 'Project path (default: current directory)', type: 'string' })
-            .option('block-critical',     { type: 'boolean', default: true })
-            .option('block-high',         { type: 'boolean', default: false })
-            .option('warn-medium',        { type: 'boolean', default: true })
-            .option('threshold',          { type: 'number',  default: 70 })
-            .option('uninstall',          { type: 'boolean', default: false }),
+            .positional('path', { describe: 'Project path (default: current directory)', type: 'string' })
+            .option('block-critical', { type: 'boolean', default: true })
+            .option('block-high', { type: 'boolean', default: false })
+            .option('warn-medium', { type: 'boolean', default: true })
+            .option('threshold', { type: 'number',  default: 70 })
+            .option('uninstall', { type: 'boolean', default: false }),
         async (argv: any) => {
           trackEvent('cli_init_hooks', { uninstall: !!argv.uninstall });
           await initHooksCommand(argv.path as string, {
             blockCritical: argv.blockCritical,
-            blockHigh:     argv.blockHigh,
-            warnMedium:    argv.warnMedium,
-            threshold:     argv.threshold,
-            uninstall:     argv.uninstall,
+            blockHigh: argv.blockHigh,
+            warnMedium: argv.warnMedium,
+            threshold: argv.threshold,
+            uninstall: argv.uninstall,
           });
         },
       )
@@ -155,7 +155,7 @@ async function main() {
             .option('debounce',  { type: 'number', default: 500 }),
         async (argv: any) => { trackEvent('cli_watch'); await watchCommand(argv.path as string, { debounce: argv.debounce }); },
       )
-      .version('0.1.42')
+      .version('0.1.43')
       .help()
       .alias('h', 'help')
       .epilogue(chalk.gray('For more information, visit: https://www.cxgrd.com'))
