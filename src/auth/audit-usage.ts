@@ -127,11 +127,9 @@ export async function printAuditUsageStatus(json : boolean): Promise<void> {
     );
   }
 
-  console.log(JSON.stringify({ auditsThisMonth: count, monthlyLimit: FREE_MONTHLY_AUDIT_LIMIT, percentUsed: percent }));
-
-  if (count >= FREE_MONTHLY_AUDIT_LIMIT - 5) {
-    console.log(
-      chalk.yellow(`   ⚠ Approaching monthly limit — upgrade to Pro for unlimited audits`),
-    );
-  }
+  if (!json && count >= FREE_MONTHLY_AUDIT_LIMIT - 5){
+      console.log(
+        chalk.yellow(`   ⚠ Approaching monthly limit — upgrade to Pro for unlimited audits`),
+      );
+    }
 }
