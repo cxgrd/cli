@@ -21,8 +21,7 @@ jobs:
 
       - run: cxgrd scan
 
-      - id: cxgrd
-        run: echo "result=$(cxgrd check --json)" >> "$GITHUB_OUTPUT"
+      - run: cxgrd check --json > result.json
 
       - uses: actions/github-script@v7
         with:
