@@ -1,4 +1,5 @@
 import type { CompilerLanguage } from '../toolchain/types';
+import type { BlastRadiusResult } from '../utils/blast-radius-analyzer';
 
 export type IssueSeverity = 'error' | 'warning' | 'info';
 
@@ -20,6 +21,7 @@ export interface CheckResult {
   compilerSummary: CompilerRunSummary[];
   /** Languages in scope whose compiler was skipped (informational when not strict). */
   skippedLanguages: CompilerLanguage[];
+  blastResult?: BlastRadiusResult;
 }
 
 export interface CompilerRunSummary {

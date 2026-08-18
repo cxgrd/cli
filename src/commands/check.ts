@@ -183,18 +183,19 @@ export async function checkCommand(
 
     // ── CI mode: post result to server so GitHub commit status is updated ─────
     // CI mode: post result to server so GitHub commit status is updated
+
+    const gitRef = await resolveGitSha(rootPath);
+    const repoId = await resolveRepoFullName(rootPath);
+
+    const changedFiles = execSync('git diff --name-only origin/main...HEAD')
+      .toString().trim().split('\n').filter(Boolean);
+
+    // graph is already in scope from above — no need to re-read
+    const analyzer = new BlastRadiusAnalyzer(graph);
+    // no description in CI — file-path classification handles it
+    const blastResult = analyzer.analyze(changedFiles);
+
     if (isCi && session?.orgId) {
-      const gitRef = await resolveGitSha(rootPath);
-      const repoId = await resolveRepoFullName(rootPath);
-
-      const changedFiles = execSync('git diff --name-only origin/main...HEAD')
-        .toString().trim().split('\n').filter(Boolean);
-
-      // graph is already in scope from above — no need to re-read
-      const analyzer = new BlastRadiusAnalyzer(graph);
-      // no description in CI — file-path classification handles it
-      const blastResult = analyzer.analyze(changedFiles);
-
       postCiCheckResult(session, {
         repoId,
         gitRef,
@@ -221,6 +222,7 @@ export async function checkCommand(
       process.exit(1);
     }
 
+    result.blastResult = blastResult;
     if (json) {
       console.log(JSON.stringify(result));
     }
