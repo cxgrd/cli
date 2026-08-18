@@ -214,17 +214,17 @@ export async function checkCommand(
 
     trackEvent('cli_check', { scope, strict: !!options.strict, ci: isCi, passed: result.passed });
 
+    result.blastResult = blastResult;
+    if (json) {
+      console.log(JSON.stringify(result));
+    }
+
     // In CI mode, exit 1 on any failure — no exceptions
     if (!result.passed) {
       if (isCi) {
         out.error(chalk.red('\n✗ CI check failed — blocking merge.'));
       }
       process.exit(1);
-    }
-
-    result.blastResult = blastResult;
-    if (json) {
-      console.log(JSON.stringify(result));
     }
 
     return result;
