@@ -148,7 +148,7 @@ export async function inputCommand(
 
     if (!session || session.plan === 'free') {
       await incrementAuditCount();
-      await printAuditUsageStatus();
+      await printAuditUsageStatus(json);
     }
 
     await recordAuditEventIfTeam(session, rootPath, {
