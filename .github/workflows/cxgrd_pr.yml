@@ -22,6 +22,11 @@ jobs:
       - run: cxgrd scan
 
       - run: cxgrd check --json > result.json
+        continue-on-error: true
+
+      - name: Show result
+        if: always()
+        run: cat result.json
 
       - uses: actions/github-script@v7
         with:
