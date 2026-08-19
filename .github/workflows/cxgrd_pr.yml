@@ -25,26 +25,14 @@ jobs:
         id: cxgrd
         run: cxgrd check --json > result.json
 
-      - name: Read result
-        id: read_result
-        if: always()
-        run: |
-          if [ -f result.json ] && [ -s result.json ]; then
-            echo "result=$(cat result.json)" >> $GITHUB_OUTPUT
-          else
-            echo "result={\"risk\":\"unknown\",\"affectedFiles\":[]}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Show result
-        if: always()
-        run: cat result.json
-
       - uses: actions/github-script@v7
-        if: always()
         with:
           script: |
-            const result = JSON.parse(`${{ steps.read_result.outputs.result }}`);
-            const body = `## CXGRD Blast Radius\n\nRisk: ${result.risk}\nAffected files: ${result.affectedFiles.join(', ')}`;
+            const fs = require('fs');
+            const result = JSON.parse(fs.readFileSync('result.json', 'utf8'));
+
+            const body = `## CXGRD Blast Radius\n\nRisk: ${result.blastResult.riskLevel}\nAffected files: ${result.blastResult.affectedFiles.map(f => f.path).join(', ')}`;
+
             const marker = '<!-- cxgrd-check -->';
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
@@ -54,17 +42,7 @@ jobs:
             const existing = comments.find(c => c.body.includes(marker));
 
             if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body: `${marker}\n${body}`,
-              });
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: existing.id, body: `${marker}\n${body}` });
             } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body: `${marker}\n${body}`,
-              });
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body: `${marker}\n${body}` });
             }
