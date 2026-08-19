@@ -102,10 +102,10 @@ if [ -z "$STAGED_FILES" ]; then
   exit 0
 fi
 
-echo "Running cxgrd team pre-commit (policy + check)..."
+echo "Running cxgrd check (policy + check)..."
 
 # Team policy + blast radius + check (falls back to check-only on Free/Pro)
-if ! cxgrd team precommit "$PROJECT_ROOT"; then
+if ! cxgrd check "$PROJECT_ROOT"; then
   echo "Architecture check failed. Commit blocked."
   exit 1
 fi
