@@ -36,7 +36,7 @@ jobs:
             const fs = require('fs');
             const result = JSON.parse(fs.readFileSync('result.json', 'utf8'));
 
-            const body = `## CXGRD Blast Radius\n\nRisk: ${result.blastResult.riskLevel}\nAffected files: ${result.blastResult.affectedFiles.map(f => f.path).join(', ')}`;
+            const body = `## CXGRD Blast Radius\n # Here is the summary of the blast radius analysis:\nRisk: ${result.blastResult.riskLevel}\nAffected files: ${result.blastResult.affectedFiles.map(f => f.path).join(', ')}`;
 
             const marker = '<!-- cxgrd-check -->';
             const { data: comments } = await github.rest.issues.listComments({

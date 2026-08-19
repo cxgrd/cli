@@ -30,7 +30,7 @@ jobs:
         env:
           CXGRD_AUTH_TOKEN: ${{ secrets.CXGRD_AUTH_TOKEN }}
 
-      - name: Run cxgrd check
+      - name: Run cxgrd CI check
         run: cxgrd check --ci
         env:
           CXGRD_AUTH_TOKEN: ${{ secrets.CXGRD_AUTH_TOKEN }}
