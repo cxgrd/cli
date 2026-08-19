@@ -155,7 +155,7 @@ async function main() {
             .option('debounce',  { type: 'number', default: 500 }),
         async (argv: any) => { trackEvent('cli_watch'); await watchCommand(argv.path as string, { debounce: argv.debounce }); },
       )
-      .version('0.1.43')
+      .version('0.1.44')
       .help()
       .alias('h', 'help')
       .epilogue(chalk.gray('For more information, visit: https://www.cxgrd.com'))
