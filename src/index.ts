@@ -50,7 +50,7 @@ async function main() {
       )
       .command(
         'prompt <description>',
-        'Generate LLM-enriched AI prompt (Pro / Team)',
+        'Generate a deterministic architecture-aware prompt (Pro / Team)',
         (y: any) =>
           y
             .positional('description', { describe: 'Description of the change', type: 'string' })

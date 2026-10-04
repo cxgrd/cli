@@ -1,10 +1,13 @@
 import { BlastRadiusAnalyzer } from '../utils/blast-radius-analyzer';
 import { ChangeDetector } from '../utils/change-detector';
+import type { ImpactedFile } from '../utils/blast-radius-analyzer';
 
 export interface PromptSubgraph {
   changeDescription: string;
   seedFiles: string[];
-  affectedFiles: Array<{ path: string; severity: string; reason: string; distance: number }>;
+  affectedFiles: Array<Pick<ImpactedFile,
+    'path' | 'severity' | 'reason' | 'distance' | 'impactType' | 'changeRequired' | 'suggestedFix'
+  >>;
   dependencies: Array<{ from: string; to: string; type: string }>;
   symbols: Record<string, string[]>;
   architectureLayers: Record<string, string[]>;
@@ -95,6 +98,9 @@ export function buildPromptSubgraph(
         severity: f.severity,
         reason: f.reason,
         distance: f.distance,
+        impactType: f.impactType,
+        changeRequired: f.changeRequired,
+        suggestedFix: f.suggestedFix,
       })),
     dependencies: dependencies.slice(0, 40),
     symbols: relevantSymbols,
@@ -102,58 +108,4 @@ export function buildPromptSubgraph(
     riskLevel: blast.riskLevel,
     recommendations: blast.recommendations.slice(0, 6),
   };
-}
-
-export function serializeSubgraphForLlm(
-  subgraph: PromptSubgraph,
-  repoMemoryBlock: string,
-): string {
-  const parts: string[] = [
-    `# Change request\n${subgraph.changeDescription}`,
-    `\n## Blast radius (${subgraph.riskLevel} risk)`,
-    `Seed files: ${subgraph.seedFiles.length ? subgraph.seedFiles.join(', ') : '(inferred from description)'}`,
-  ];
-
-  if (subgraph.affectedFiles.length) {
-    parts.push('\n### Affected files');
-    for (const f of subgraph.affectedFiles) {
-      parts.push(`- [${f.severity}] ${f.path} — ${f.reason} (depth ${f.distance})`);
-    }
-  }
-
-  if (subgraph.dependencies.length) {
-    parts.push('\n### Dependency edges (subgraph)');
-    for (const d of subgraph.dependencies.slice(0, 25)) {
-      parts.push(`- ${d.from} → ${d.to} (${d.type})`);
-    }
-  }
-
-  const symbolEntries = Object.entries(subgraph.symbols);
-  if (symbolEntries.length) {
-    parts.push('\n### Symbols in affected modules');
-    for (const [file, syms] of symbolEntries.slice(0, 12)) {
-      parts.push(`- ${file}: ${syms.join(', ')}`);
-    }
-  }
-
-  const layers = Object.entries(subgraph.architectureLayers);
-  if (layers.length) {
-    parts.push('\n### Architecture layers');
-    for (const [layer, files] of layers) {
-      parts.push(`- ${layer}: ${(files as string[]).length} files`);
-    }
-  }
-
-  if (subgraph.recommendations.length) {
-    parts.push('\n### Analyzer recommendations');
-    for (const r of subgraph.recommendations) {
-      parts.push(`- ${r}`);
-    }
-  }
-
-  if (repoMemoryBlock.trim()) {
-    parts.push('\n' + repoMemoryBlock);
-  }
-
-  return parts.join('\n');
 }

@@ -19,6 +19,15 @@ export interface IntentMatch {
   intent: string;
 }
 
+export function selectChangeTargets(
+  descriptionMatches: string[],
+  symbolMatches: string[],
+  gitChanges: string[],
+): string[] {
+  const explicitMatches = [...new Set([...descriptionMatches, ...symbolMatches])];
+  return explicitMatches.length > 0 ? explicitMatches : [...new Set(gitChanges)];
+}
+
 export class ChangeDetector {
   constructor(private projectRoot: string) {}
 

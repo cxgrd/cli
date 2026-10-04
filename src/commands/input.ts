@@ -1,7 +1,7 @@
 import { resolve } from 'path';
 import { CgDirectory } from '../cg-directory';
 import { BlastRadiusAnalyzer, BlastRadiusResult } from '../utils/blast-radius-analyzer';
-import { ChangeDetector } from '../utils/change-detector';
+import { ChangeDetector, selectChangeTargets } from '../utils/change-detector';
 import { RichOutput, CLIFormatter } from '../utils/cli-formatter';
 import { appendMemorySession } from '../memory/repo-memory';
 import { resolveActiveSession } from '../auth/auth-session';
@@ -91,12 +91,17 @@ export async function inputCommand(
     const gitChanges = changeDetector.getChangedFiles();
     const descriptionMatch = changeDetector.parseDescription(description, allFiles);
 
-    // Combine all sources
-    const uniqueFiles = [...new Set([
-      ...gitChanges.files,
-      ...descriptionMatch.files,
-      ...symbolMatches,
-    ])];
+    // Prefer files identified from this request; unrelated working-tree edits
+    // should only be used when the request itself resolves no target files.
+    const uniqueFiles = selectChangeTargets(
+      descriptionMatch.files,
+      symbolMatches,
+      gitChanges.files,
+    );
+
+    if (!json && uniqueFiles.length > 0 && descriptionMatch.files.length + symbolMatches.length === 0) {
+      RichOutput.info('No request-specific files matched; using changed Git files.');
+    }
 
     if (!json){
       if (uniqueFiles.length === 0) {
@@ -144,7 +149,7 @@ export async function inputCommand(
     });
 
     if (!json) RichOutput.success('Blast radius analysis saved to history');
-    console.log(chalk.gray('   Tip: run `cxgrd prompt "same description"` to get an LLM prompt targeting these files.'));
+    console.log(chalk.gray('   Tip: run `cxgrd prompt "same description"` to generate a coding prompt targeting these files.'));
 
     if (!session || session.plan === 'free') {
       await incrementAuditCount();

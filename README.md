@@ -60,7 +60,7 @@ cxgrd check
 
 - `cxgrd scan` → writes .cg/ from scratch or diffs it
 - `cxgrd input` → reads graph + architecture + history, writes to history.json
-- `cxgrd prompt` → reads everything, sends a subgraph to your LLM, and returns an enriched prompt
+- `cxgrd prompt` → builds a deterministic coding prompt from the request and blast-radius results
 - `cxgrd check` → reads graph + compiler output, writes result to history.json
 - `cxgrd auth login` → log in for Pro, Team, and Enterprise users
 - `cxgrd doctor` → verifies toolchain readiness before strict checks
