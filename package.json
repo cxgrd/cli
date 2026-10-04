@@ -1,6 +1,6 @@
 {
   "name": "cxgrd",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "AI context guardrail CLI — dependency-aware architecture safety for AI-assisted development",
   "main": "dist/index.js",
   "bin": {
