@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="License" src="https://img.shields.io/badge/License-MIT%20-4f5d75?style=flat-square" />
-  <img alt="Release" src="https://img.shields.io/badge/release-v1.1.0-8b5cf6?style=flat-square" />
+  <img alt="Release" src="https://img.shields.io/badge/release-v1.1.1-8b5cf6?style=flat-square" />
 </p>
 
 <h1 align="center">Architectural Guardrail for AI-native development</h1>
